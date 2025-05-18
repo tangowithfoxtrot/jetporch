@@ -16,8 +16,8 @@
 
 use crate::tasks::*;
 use crate::handle::handle::TaskHandle;
-use serde::{Deserialize};
-use std::sync::{Arc};
+use serde::Deserialize;
+use std::sync::Arc;
 
 
 const MODULE: &str = "Set";
@@ -43,15 +43,15 @@ impl IsTask for SetTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(SetAction {
                     vars: self.vars.clone() /* templating will happen below */
                 }),
-                with: Arc::new(PreLogicInput::template(&handle, &request, tm, &self.with)?),
-                and: Arc::new(PostLogicInput::template(&handle, &request, tm, &self.and)?),
+                with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
+                and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?),
             }
-        );
+        )
     }
 
 }
@@ -63,7 +63,7 @@ impl IsAction for SetAction {
         match request.request_type {
 
             TaskRequestType::Query => {
-                return Ok(handle.response.needs_passive(&request));
+                Ok(handle.response.needs_passive(request))
             },
 
             TaskRequestType::Passive => {
@@ -85,11 +85,11 @@ impl IsAction for SetAction {
                 }
 
                 handle.host.write().unwrap().update_variables(mapping);
-                return Ok(handle.response.is_passive(&request));
+                Ok(handle.response.is_passive(request))
             
             }
 
-            _ => { return Err(handle.response.not_supported(request)); }
+            _ => { Err(handle.response.not_supported(request))}
 
         }
     }

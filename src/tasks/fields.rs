@@ -44,10 +44,6 @@ pub enum Field {
 
 impl Field {
     pub fn all_file_attributes() -> Vec<Field> {
-        let mut result : Vec<Field> = Vec::new();
-        result.push(Field::Owner);
-        result.push(Field::Group);
-        result.push(Field::Mode);
-        return result; 
+        vec![Field::Owner, Field::Group, Field::Mode]
     }
 }

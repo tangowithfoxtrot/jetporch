@@ -17,7 +17,7 @@
 use crate::tasks::*;
 use crate::modules::packages::common::{PackageManagementModule,PackageDetails};
 use crate::handle::handle::{TaskHandle,CheckRc};
-use serde::{Deserialize};
+use serde::Deserialize;
 use std::sync::Arc;
 
 const MODULE: &str = "apt";
@@ -48,25 +48,25 @@ impl IsTask for AptTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(AptAction {
                     package:    handle.template.string_no_spaces(request, tm, &String::from("package"), &self.package)?,
-                    version:    handle.template.string_option_no_spaces(&request, tm, &String::from("version"), &self.version)?,
-                    update:     handle.template.boolean_option_default_false(&request, tm, &String::from("update"), &self.update)?,
-                    remove:     handle.template.boolean_option_default_false(&request, tm, &String::from("remove"), &self.remove)?
+                    version:    handle.template.string_option_no_spaces(request, tm, &String::from("version"), &self.version)?,
+                    update:     handle.template.boolean_option_default_false(request, tm, &String::from("update"), &self.update)?,
+                    remove:     handle.template.boolean_option_default_false(request, tm, &String::from("remove"), &self.remove)?
                 }),
-                with: Arc::new(PreLogicInput::template(&handle, &request, tm, &self.with)?),
-                and: Arc::new(PostLogicInput::template(&handle, &request, tm, &self.and)?)
+                with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
+                and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?)
             }
-        );
+        )
     }
 
 }
 
 impl IsAction for AptAction {
     fn dispatch(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>, Arc<TaskResponse>> {
-        return self.common_dispatch(handle,request);
+        self.common_dispatch(handle,request)
     }
 }
 
@@ -74,19 +74,19 @@ impl PackageManagementModule for AptAction {
 
     fn initial_setup(&self, _handle: &Arc<TaskHandle>, _request: &Arc<TaskRequest>) -> Result<(),Arc<TaskResponse>> {
         // nothing to do here, see how this was used in yum_dnf.rs
-        return Ok(());
+        Ok(())
     }
 
     fn is_update(&self) -> bool {
-        return self.update;
+        self.update
     }
 
     fn is_remove(&self) -> bool {
-        return self.remove; 
+        self.remove
     }
 
     fn get_version(&self) -> Option<String> {
-        return self.version.clone();
+        self.version.clone()
     }
 
     fn get_remote_version(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
@@ -101,14 +101,13 @@ impl PackageManagementModule for AptAction {
                     return Ok(None);
                 }
                 if rc == 0 {
-                    let details = self.parse_remote_package_details(handle, &out.clone());
-                    return details;
+                    self.parse_remote_package_details(handle, &out.clone())
                 } else {
-                    return Ok(None);
+                    Ok(None)
                 }
             },
             Err(e) => {
-                return Err(e);
+                Err(e)
             }
         }
     }
@@ -134,12 +133,12 @@ impl PackageManagementModule for AptAction {
                 let (rc,out) = cmd_info(&r);
                 if rc == 0 {
                     let details = self.parse_local_package_details(handle, &out.clone())?;
-                    return Ok(details);
+                    Ok(details)
                 } else {
-                    return Ok(None);
+                    Ok(None)
                 }
             },
-            Err(e) => return Err(e)
+            Err(e) => Err(e)
         }
     }
 
@@ -148,7 +147,7 @@ impl PackageManagementModule for AptAction {
             true => format!("DEBIAN_FRONTEND=noninteractive apt-get install '{}' -qq", self.package),
             false => format!("DEBIAN_FRONTEND=noninteractive apt-get install '{}={}' -qq", self.package, self.version.as_ref().unwrap())
         };
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
 
     fn update_package(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
@@ -156,33 +155,33 @@ impl PackageManagementModule for AptAction {
             true => format!("DEBIAN_FRONTEND=noninteractive apt-get install '{}' --only-upgrade -qq", self.package),
             false => format!("DEBIAN_FRONTEND=noninteractive apt-get install '{}={}' --only-upgrade -qq", self.package, self.version.as_ref().unwrap())
         };
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
 
     fn remove_package(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
         let cmd = format!("DEBIAN_FRONTEND=noninteractive apt-get remove '{}' -qq", self.package);
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
 
 }
 
 impl AptAction {
 
-    pub fn parse_local_package_details(&self, _handle: &Arc<TaskHandle>, out: &String) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
+    pub fn parse_local_package_details(&self, _handle: &Arc<TaskHandle>, out: &str) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
         let mut tokens = out.split("\t");
         let version = tokens.nth(1);
-        return match version {
+        match version {
             Some(v) => {
                 Ok(Some(PackageDetails { name: self.package.clone(), version: v.trim().to_string() }))
             },
             None => {
                 Ok(None)
             }
-        };
+        }
     }
 
-    pub fn parse_remote_package_details(&self, _handle: &Arc<TaskHandle>, out: &String) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
-        return Ok(Some(PackageDetails { name: self.package.clone(), version: out.trim().to_string() }));
+    pub fn parse_remote_package_details(&self, _handle: &Arc<TaskHandle>, out: &str) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
+        Ok(Some(PackageDetails { name: self.package.clone(), version: out.trim().to_string() }))
     }
 
 }

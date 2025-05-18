@@ -76,11 +76,11 @@ pub fn playbook_traversal(run_state: &Arc<RunState>) -> Result<(), String> {
         run_state.visitor.read().unwrap().on_playbook_start(&run_state.context);
 
         // parse the playbook file
-        let playbook_file = jet_file_open(&playbook_path)?;
+        let playbook_file = jet_file_open(playbook_path)?;
         let parsed: Result<Vec<Play>, serde_yaml::Error> = serde_yaml::from_reader(playbook_file);
-        if parsed.is_err() {
-            show_yaml_error_in_context(&parsed.unwrap_err(), &playbook_path);
-            return Err(format!("edit the file and try again?"));
+        if let Err(e) = parsed {
+            show_yaml_error_in_context(&e, playbook_path);
+            return Err("edit the file and try again?".to_string());
         }   
 
         // chdir in the playbook directory
@@ -90,13 +90,13 @@ pub fn playbook_traversal(run_state: &Arc<RunState>) -> Result<(), String> {
         let pbdir = Path::new(&pbdirname);
         if pbdirname.eq(&String::from("")) {
         } else {
-            env::set_current_dir(&pbdir).expect("could not chdir into playbook directory");
+            env::set_current_dir(pbdir).expect("could not chdir into playbook directory");
         }
 
         // walk each play in the playbook
         let plays: Vec<Play> = parsed.unwrap();
         for play in plays.iter() {
-            match handle_play(&run_state, play) {
+            match handle_play(run_state, play) {
                 Ok(_) => {},
                 Err(s) => { return Err(s); }
             }
@@ -107,14 +107,14 @@ pub fn playbook_traversal(run_state: &Arc<RunState>) -> Result<(), String> {
         run_state.context.read().unwrap().connection_cache.write().unwrap().clear();
 
         // switch back to the original directory
-        env::set_current_dir(&previous).expect("could not restore previous directory");
+        env::set_current_dir(previous).expect("could not restore previous directory");
 
 
     }
     // disconnect from all hosts and exit. 
     run_state.context.read().unwrap().connection_cache.write().unwrap().clear();
     run_state.visitor.read().unwrap().on_exit(&run_state.context);
-    return Ok(())
+    Ok(())
 }
 
 fn handle_play(run_state: &Arc<RunState>, play: &Play) -> Result<(), String> {
@@ -128,7 +128,7 @@ fn handle_play(run_state: &Arc<RunState>, play: &Play) -> Result<(), String> {
         let mut ctx = run_state.context.write().unwrap();
         ctx.set_play(play);
         if play.ssh_user.is_some() {
-            ctx.set_ssh_user(&play.ssh_user.as_ref().unwrap());
+            ctx.set_ssh_user(play.ssh_user.as_ref().unwrap());
         }
         if play.ssh_port.is_some() {
             ctx.set_ssh_port(play.ssh_port.unwrap());
@@ -179,43 +179,43 @@ fn handle_play(run_state: &Arc<RunState>, play: &Play) -> Result<(), String> {
     run_state.visitor.read().unwrap().on_play_stop(&run_state.context, failed);
     
     if failed {
-        return Err(failure_message.clone());
+        Err(failure_message.clone())
     } else {
-        return Ok(())
+        Ok(())
     }
 }
 
-fn handle_batch(run_state: &Arc<RunState>, play: &Play, hosts: &Vec<Arc<RwLock<Host>>>) -> Result<(), String> {
+fn handle_batch(run_state: &Arc<RunState>, play: &Play, hosts: &[Arc<RwLock<Host>>]) -> Result<(), String> {
 
     // assign the batch
-    { let mut ctx = run_state.context.write().unwrap(); ctx.set_targetted_hosts(&hosts); }
+    { let mut ctx = run_state.context.write().unwrap(); ctx.set_targetted_hosts(hosts); }
 
     // handle role tasks
     if play.roles.is_some() {
         let roles = play.roles.as_ref().unwrap();
-        for invocation in roles.iter() { process_role(run_state, &play, &invocation, HandlerMode::NormalTasks)?; }
+        for invocation in roles.iter() { process_role(run_state, play, invocation, HandlerMode::NormalTasks)?; }
     }
     { let mut ctx = run_state.context.write().unwrap(); ctx.unset_role(); }
 
     // handle loose play tasks
     if play.tasks.is_some() {
         let tasks = play.tasks.as_ref().unwrap();
-        for task in tasks.iter() { process_task(run_state, &play, &task, HandlerMode::NormalTasks, None)?; }
+        for task in tasks.iter() { process_task(run_state, play, task, HandlerMode::NormalTasks, None)?; }
     }
 
     // handle role handlers
     if play.roles.is_some() {
         let roles = play.roles.as_ref().unwrap();
-        for invocation in roles.iter() { process_role(run_state, &play, &invocation, HandlerMode::Handlers)?; }
+        for invocation in roles.iter() { process_role(run_state, play, invocation, HandlerMode::Handlers)?; }
     }   
     { let mut ctx = run_state.context.write().unwrap(); ctx.unset_role(); }  
 
     // handle loose play handlers
     if play.handlers.is_some() {
         let handlers = play.handlers.as_ref().unwrap();
-        for handler in handlers { process_task(run_state, &play, &handler, HandlerMode::Handlers, None)?;  }
+        for handler in handlers { process_task(run_state, play, handler, HandlerMode::Handlers, None)?;  }
     }
-    return Ok(())
+    Ok(())
 
 }
 
@@ -233,7 +233,7 @@ fn check_tags(run_state: &Arc<RunState>, task: &Task, role_invocation: Option<&R
                 Some(task_with) => match task_with.tags {
                     // tags are applied to the task
                     Some(task_tags) => {
-                        for x in task_tags.iter() {  if cli_tags.contains(&x) { return true; } }
+                        for x in task_tags.iter() {  if cli_tags.contains(x) { return true; } }
                     },
                     // no tags
                     None => {}
@@ -242,11 +242,8 @@ fn check_tags(run_state: &Arc<RunState>, task: &Task, role_invocation: Option<&R
             };
             match role_invocation {
                 // the role invocation has tags applied
-                Some(role_invoke) => match &role_invoke.tags {
-                    Some(role_tags) => {
-                        for x in role_tags.iter() { if cli_tags.contains(&x) { return true; } }
-                    },
-                    None => {}
+                Some(role_invoke) => if let Some(role_tags) = &role_invoke.tags {
+                    for x in role_tags.iter() { if cli_tags.contains(x) { return true; } }
                 },
                 None => {}
             };
@@ -255,7 +252,7 @@ fn check_tags(run_state: &Arc<RunState>, task: &Task, role_invocation: Option<&R
         None => { return true; }
     }
     // we didn't match any tags, so don't run the task
-    return false;
+    false
 }
 
 fn process_task(run_state: &Arc<RunState>, play: &Play, task: &Task, are_handlers: HandlerMode, role_invocation: Option<&RoleInvocation>) -> Result<(), String> {
@@ -264,18 +261,18 @@ fn process_task(run_state: &Arc<RunState>, play: &Play, task: &Task, are_handler
     // by rayon, for multi-threaded execution with our thread worker pool.
 
     let hosts : HashMap<String, Arc<RwLock<Host>>> = run_state.context.read().unwrap().get_remaining_hosts();
-    if hosts.len() == 0 { return Err(String::from("no hosts remaining")) }
+    if hosts.is_empty() { return Err(String::from("no hosts remaining")) }
 
     // we will run tasks with the FSM only if not skipped by tags
     let should_run = check_tags(run_state, task, role_invocation);
     if should_run {
-        run_state.context.write().unwrap().set_task(&task);
+        run_state.context.write().unwrap().set_task(task);
         run_state.visitor.read().unwrap().on_task_start(&run_state.context, are_handlers);
         run_state.context.write().unwrap().increment_task_count();
         fsm_run_task(run_state, play, task, are_handlers)?;
     }
 
-    return Ok(());
+    Ok(())
 }
 
 fn process_role(run_state: &Arc<RunState>, play: &Play, invocation: &RoleInvocation, are_handlers: HandlerMode) -> Result<(), String> {
@@ -287,7 +284,7 @@ fn process_role(run_state: &Arc<RunState>, play: &Play, invocation: &RoleInvocat
     let role_name = invocation.role.clone();
 
     // can we find a role directory in the configured role paths?
-    let (role, role_path) = find_role(run_state, &play, role_name.clone())?;
+    let (role, role_path) = find_role(run_state, play, role_name.clone())?;
     {
         // we're good.
         let mut ctx = run_state.context.write().unwrap();
@@ -343,11 +340,11 @@ fn process_role(run_state: &Arc<RunState>, play: &Play, invocation: &RoleInvocat
 
             // parse the YAML file
 
-            let task_fh = jet_file_open(&task_buf.as_path())?;
+            let task_fh = jet_file_open(task_buf.as_path())?;
             let parsed: Result<Vec<Task>, serde_yaml::Error> = serde_yaml::from_reader(task_fh);
-            if parsed.is_err() {
-                show_yaml_error_in_context(&parsed.unwrap_err(), &task_buf.as_path());
-                return Err(format!("edit the file and try again?"));
+            if let Err(e) = parsed {
+                show_yaml_error_in_context(&e, task_buf.as_path());
+                return Err("edit the file and try again?".to_string());
             }   
             let tasks = parsed.unwrap();
             for task in tasks.iter() {
@@ -355,20 +352,20 @@ fn process_role(run_state: &Arc<RunState>, play: &Play, invocation: &RoleInvocat
                 // process all tasks in the YAML file, this is the same function used
                 // for processing loose tasks outside of roles
 
-                process_task(run_state, &play, &task, are_handlers, Some(invocation))?;
+                process_task(run_state, play, task, are_handlers, Some(invocation))?;
             }
         }
 
         // we're done with the role so flip back to the previous directory
 
-        match env::set_current_dir(&previous) {
+        match env::set_current_dir(previous) {
             Ok(_) => {}, Err(s) => { return Err(format!("could not restore previous directory after role evaluation: {:?}, {}", previous, s)) }
         }
 
     }
 
     run_state.visitor.read().unwrap().on_role_stop(&run_state.context);
-    return Ok(())
+    Ok(())
 
 }
 
@@ -395,14 +392,14 @@ fn get_host_batches(run_state: &Arc<RunState>, play: &Play, hosts: Vec<Arc<RwLoc
         _ => {
             let mut count = host_count / batch_size;
             let remainder = host_count % batch_size;
-            if remainder > 0 { count = count + 1 }
+            if remainder > 0 { count += 1 }
             count
         }
     };
 
     // sort the hosts so the batches seem consistent when doing successive playbook executions
 
-    let mut hosts_list : Vec<Arc<RwLock<Host>>> = hosts.iter().map(|v| Arc::clone(&v)).collect();
+    let mut hosts_list : Vec<Arc<RwLock<Host>>> = hosts.iter().map(Arc::clone).collect();
     hosts_list.sort_by(|b, a| a.read().unwrap().name.partial_cmp(&b.read().unwrap().name).unwrap());
 
     // put the hosts into ththe assigned batches
@@ -412,8 +409,8 @@ fn get_host_batches(run_state: &Arc<RunState>, play: &Play, hosts: Vec<Arc<RwLoc
         let mut batch : Vec<Arc<RwLock<Host>>> = Vec::new();
         for _host_ct in 0..batch_size {
             let host = hosts_list.pop();
-            if host.is_some() {
-                batch.push(host.unwrap());
+            if let Some(host) = host {
+                batch.push(host);
             } else {
                 break;
             }
@@ -421,7 +418,7 @@ fn get_host_batches(run_state: &Arc<RunState>, play: &Play, hosts: Vec<Arc<RwLoc
         results.insert(batch_num, batch);
     }
 
-    return (batch_size, batch_count, results);
+    (batch_size, batch_count, results)
 
 }
 
@@ -434,14 +431,8 @@ fn get_play_hosts(run_state: &Arc<RunState>,play: &Play) -> Vec<Arc<RwLock<Host>
     let groups = &play.groups;
     let mut results : HashMap<String, Arc<RwLock<Host>>> = HashMap::new();
     
-    let has_group_limits = match run_state.limit_groups.len() {
-        0 => false,
-        _ => true
-    };
-    let has_host_limits = match run_state.limit_hosts.len() {
-        0 => false,
-        _ => true
-    };
+    let has_group_limits = !matches!(run_state.limit_groups.len(), 0);
+    let has_host_limits = !matches!(run_state.limit_hosts.len(), 0);
 
     for group in groups.iter() {
 
@@ -468,17 +459,17 @@ fn get_play_hosts(run_state: &Arc<RunState>,play: &Play) -> Vec<Arc<RwLock<Host>
                     }
                 }
                 if ok {
-                    results.insert(k.clone(), Arc::clone(&v));
+                    results.insert(k.clone(), Arc::clone(v));
                 }
             } 
             else {
-                results.insert(k.clone(), Arc::clone(&v));
+                results.insert(k.clone(), Arc::clone(v));
             }
 
         }
     }
 
-    return results.iter().map(|(_k,v)| Arc::clone(&v)).collect();
+    results.values().map(Arc::clone).collect()
 }
 
 fn validate_limit_groups(run_state: &Arc<RunState>, _play: &Play) -> Result<(), String> {
@@ -492,7 +483,7 @@ fn validate_limit_groups(run_state: &Arc<RunState>, _play: &Play) -> Result<(), 
             return Err(format!("--limit-groups: at least one referenced group ({}) is not found in inventory", group_name));
         }
     }
-    return Ok(());
+    Ok(())
 }
 
 fn validate_limit_hosts(run_state: &Arc<RunState>, _play: &Play) -> Result<(), String> {
@@ -506,7 +497,7 @@ fn validate_limit_hosts(run_state: &Arc<RunState>, _play: &Play) -> Result<(), S
             return Err(format!("--limit-hosts: at least one referenced host ({}) is not found in inventory", host_name));
         }
     }
-    return Ok(());
+    Ok(())
 }
 
 fn validate_groups(run_state: &Arc<RunState>, play: &Play) -> Result<(), String> {
@@ -520,10 +511,10 @@ fn validate_groups(run_state: &Arc<RunState>, play: &Play) -> Result<(), String>
             return Err(format!("at least one referenced group ({}) is not found in inventory", group_name));
         }
     }
-    return Ok(());
+    Ok(())
 }
 
-fn validate_hosts(_run_state: &Arc<RunState>, _play: &Play, hosts: &Vec<Arc<RwLock<Host>>>) -> Result<(), String> {
+fn validate_hosts(_run_state: &Arc<RunState>, _play: &Play, hosts: &[Arc<RwLock<Host>>]) -> Result<(), String> {
 
     // once hosts are selected we need to select more than one host, if the groups were all
     // empty, don't try to run the playbook
@@ -531,7 +522,7 @@ fn validate_hosts(_run_state: &Arc<RunState>, _play: &Play, hosts: &Vec<Arc<RwLo
     if hosts.is_empty() {
         return Err(String::from("no hosts selected by groups in play"));
     }
-    return Ok(());
+    Ok(())
 }
 
 fn load_vars_into_context(run_state: &Arc<RunState>, play: &Play) -> Result<(), String> {
@@ -556,11 +547,11 @@ fn load_vars_into_context(run_state: &Arc<RunState>, play: &Play) -> Result<(), 
         let vars_files = play.vars_files.as_ref().unwrap();
         for pathname in vars_files {
             let path = Path::new(&pathname);
-            let vars_file = jet_file_open(&path)?;
+            let vars_file = jet_file_open(path)?;
             let parsed: Result<serde_yaml::Mapping, serde_yaml::Error> = serde_yaml::from_reader(vars_file);
-            if parsed.is_err() {
-                show_yaml_error_in_context(&parsed.unwrap_err(), &path);
-                return Err(format!("edit the file and try again?"));
+            if let Err(e) = parsed {
+                show_yaml_error_in_context(&e, path);
+                return Err("edit the file and try again?".to_string());
             }
             blend_variables(&mut ctx_vars_storage, serde_yaml::Value::Mapping(parsed.unwrap()));
         }
@@ -582,7 +573,7 @@ fn load_vars_into_context(run_state: &Arc<RunState>, play: &Play) -> Result<(), 
         _ => panic!("unexpected, get_blended_variables produced a non-mapping (1)")
     }
 
-    return Ok(());
+    Ok(())
 }
 
 fn find_role(run_state: &Arc<RunState>, _play: &Play, role_name: String) -> Result<(Role,PathBuf), String> {
@@ -601,21 +592,21 @@ fn find_role(run_state: &Arc<RunState>, _play: &Play, role_name: String) -> Resu
 
         if pb2.exists() {
             let path = pb2.as_path();
-            let role_file = jet_file_open(&path)?;
+            let role_file = jet_file_open(path)?;
 
             // deserialize the role file and make sure it is valid before returning
 
             let parsed: Result<Role, serde_yaml::Error> = serde_yaml::from_reader(role_file);
-            if parsed.is_err() {
-                show_yaml_error_in_context(&parsed.unwrap_err(), &path);
-                return Err(format!("edit the file and try again?"));
+            if let Err(e) = parsed {
+                show_yaml_error_in_context(&e, path);
+                return Err("edit the file and try again?".to_string());
             }   
             let role = parsed.unwrap();
             
             return Ok((role,pb));
         }
     }
-    return Err(format!("role not found: {}", role_name));
+    Err(format!("role not found: {}", role_name))
 }  
 
 

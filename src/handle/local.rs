@@ -41,81 +41,79 @@ impl Local {
         Self {
             run_state: run_state_handle,
             _host: host_handle,
-            response: response
+            response
         }
     }
 
     pub fn get_localhost(&self) -> Arc<RwLock<Host>> {
         let inventory = self.run_state.inventory.read().unwrap();
-        return inventory.get_host(&String::from("localhost"));
+        inventory.get_host(&String::from("localhost"))
     }
 
     fn unwrap_string_result(&self, request: &Arc<TaskRequest>, str_result: &Result<String,String>) -> Result<String, Arc<TaskResponse>> {
-        return match str_result {
+        match str_result {
             Ok(x) => Ok(x.clone()),
             Err(y) => Err(self.response.is_failed(request, &y.clone()))
-        };
+        }
     }
 
     // runs a shell command.  These can only be executed in the query stage as we don't want anything done to actually configure
     // a machine in local.rs. 
 
-    fn run(&self, request: &Arc<TaskRequest>, cmd: &String, check_rc: CheckRc) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
+    fn run(&self, request: &Arc<TaskRequest>, cmd: &str, check_rc: CheckRc) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
         
         assert!(request.request_type == TaskRequestType::Query, "local commands can only be run in query stage (was: {:?})", request.request_type);
         // apply basic screening of the entire shell command, more filtering should already be done by cmd_library
-        match screen_general_input_loose(&cmd) {
+        match screen_general_input_loose(cmd) {
             Ok(_x) => {},
             Err(y) => return Err(self.response.is_failed(request, &y.clone()))
         }
         let ctx = &self.run_state.context;
-        let local_result = self.run_state.connection_factory.read().unwrap().get_local_connection(&ctx);
+        let local_result = self.run_state.connection_factory.read().unwrap().get_local_connection(ctx);
         let local_conn = match local_result {
             Ok(x) => x,
             Err(y) => { return Err(self.response.is_failed(request, &y.clone())) }
         };
         let result = local_conn.lock().unwrap().run_command(&self.response, request, cmd, Forward::No);
 
-        if check_rc == CheckRc::Checked {
-            if result.is_ok() {
-                let ok_result = result.as_ref().unwrap();
-                let cmd_result = ok_result.command_result.as_ref().as_ref().unwrap();
-                if cmd_result.rc != 0 {
-                    return Err(self.response.command_failed(request, &Arc::new(Some(cmd_result.clone()))));
-                }
+        if check_rc == CheckRc::Checked && result.is_ok() {
+            let ok_result = result.as_ref().unwrap();
+            let cmd_result = ok_result.command_result.as_ref().as_ref().unwrap();
+            if cmd_result.rc != 0 {
+                return Err(self.response.command_failed(request, &Arc::new(Some(cmd_result.clone()))));
             }
         }
-        return result;
+        result
     }
 
     pub fn read_file(&self, request: &Arc<TaskRequest>, path: &Path) -> Result<String, Arc<TaskResponse>> {
-        return match crate::util::io::read_local_file(path) {
+        match crate::util::io::read_local_file(path) {
             Ok(s) => Ok(s),
             Err(x) => Err(self.response.is_failed(request, &x.clone()))
-        };
+        }
     }
 
     fn internal_sha512(&self, request: &Arc<TaskRequest>, path: &String) -> Result<String,Arc<TaskResponse>> {
         let localhost = self.get_localhost();
         let os_type = localhost.read().unwrap().os_type.expect("unable to detect host OS type");
         let get_cmd_result = crate::tasks::cmd_library::get_sha512_command(os_type, path);
-        let cmd = self.unwrap_string_result(&request, &get_cmd_result)?;
+        let cmd = self.unwrap_string_result(request, &get_cmd_result)?;
         let result = self.run(request, &cmd, CheckRc::Unchecked)?;
         let (rc, out) = cmd_info(&result);
         match rc {
             // we can all unwrap because all possible string lists will have at least 1 element
             0 => {
                 let value = out.split_whitespace().nth(0).unwrap().to_string();
-                return Ok(value);
+                Ok(value)
             },
             127 => {
                 // file not found
-                return Ok(String::from(""))
+                Ok(String::from(""))
             },
             _ => {
-                return Err(self.response.is_failed(request, &format!("checksum failed: {}. {}", path, out)));
+                Err(self.response.is_failed(request, &format!("checksum failed: {}. {}", path, out)))
             }
-        };
+        }
     }
 
     pub fn get_sha512(&self, request: &Arc<TaskRequest>, path: &Path, use_cache: bool) -> Result<String,Arc<TaskResponse>> {
@@ -126,8 +124,8 @@ impl Local {
             let task_id = ctx.get_task_count();
             let mut localhost2 = localhost.write().unwrap();
             let cached = localhost2.get_checksum_cache(task_id, &path2);
-            if cached.is_some() {
-                return Ok(cached.unwrap());
+            if let Some(cached) = cached {
+                return Ok(cached);
             }
         }
 
@@ -137,7 +135,7 @@ impl Local {
             let mut localhost2 = localhost.write().unwrap();
             localhost2.set_checksum_cache(&path2, &value);
         }
-        return Ok(value);
+        Ok(value)
     }
 
 

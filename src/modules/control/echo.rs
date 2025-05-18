@@ -43,7 +43,7 @@ impl IsTask for EchoTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(EchoAction {
                     name: self.name.clone().unwrap_or(String::from(MODULE)),
@@ -52,7 +52,7 @@ impl IsTask for EchoTask {
                 with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
                 and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?),
             }
-        );
+        )
     }
 }
 
@@ -63,15 +63,15 @@ impl IsAction for EchoAction {
         match request.request_type {
 
             TaskRequestType::Query => {
-                return Ok(handle.response.needs_passive(request));
+                Ok(handle.response.needs_passive(request))
             },
 
             TaskRequestType::Passive => {
-                handle.debug(&request, &self.msg);
-                return Ok(handle.response.is_passive(request));
+                handle.debug(request, &self.msg);
+                Ok(handle.response.is_passive(request))
             },
 
-            _ => { return Err(handle.response.not_supported(request)); }
+            _ => { Err(handle.response.not_supported(request))}
 
         }
 

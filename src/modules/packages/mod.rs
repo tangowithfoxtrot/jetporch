@@ -16,6 +16,7 @@
 
 pub mod common;
 
+#[allow(clippy::empty_line_after_doc_comments)]
 /** ADD MODULES HERE, KEEP ALPHABETIZED **/
 
 pub mod apt;

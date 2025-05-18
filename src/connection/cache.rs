@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // long with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::connection::connection::{Connection};
+use crate::connection::connection::Connection;
 use crate::inventory::hosts::Host;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -39,12 +39,12 @@ impl ConnectionCache {
 
     pub fn has_connection(&self, host: &Arc<RwLock<Host>>) -> bool {
         let host2 = host.read().expect("host read");
-        return self.connections.contains_key(&host2.name.clone());
+        self.connections.contains_key(&host2.name.clone())
     }
 
     pub fn get_connection(&self, host: &Arc<RwLock<Host>>) -> Arc<Mutex<dyn Connection>> {
         let host2 = host.read().expect("host read");
-        return Arc::clone(self.connections.get(&host2.name.clone()).unwrap());
+        Arc::clone(self.connections.get(&host2.name.clone()).unwrap())
     }
 
     pub fn clear(&mut self) {

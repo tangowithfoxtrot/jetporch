@@ -16,7 +16,7 @@
 
 use crate::tasks::*;
 use crate::handle::handle::TaskHandle;
-use crate::inventory::hosts::{HostOSType};
+use crate::inventory::hosts::HostOSType;
 use serde::Deserialize;
 use std::sync::{Arc,RwLock};
 
@@ -43,17 +43,17 @@ impl IsTask for FactsTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(FactsAction {
-                    facter:  handle.template.boolean_option_default_false(&request, tm, &String::from("facter"), &self.facter)?,
-                    ohai:    handle.template.boolean_option_default_false(&request, tm, &String::from("ohai"), &self.ohai)?,
+                    facter:  handle.template.boolean_option_default_false(request, tm, &String::from("facter"), &self.facter)?,
+                    ohai:    handle.template.boolean_option_default_false(request, tm, &String::from("ohai"), &self.ohai)?,
 
                 }),
                 with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
                 and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?),
             }
-        );
+        )
     }
 }
 
@@ -64,15 +64,15 @@ impl IsAction for FactsAction {
         match request.request_type {
 
             TaskRequestType::Query => {
-                return Ok(handle.response.needs_passive(request));
+                Ok(handle.response.needs_passive(request))
             },
 
             TaskRequestType::Passive => {
                 self.do_facts(handle, request)?;
-                return Ok(handle.response.is_passive(request));
+                Ok(handle.response.is_passive(request))
             },
 
-            _ => { return Err(handle.response.not_supported(request)); }
+            _ => { Err(handle.response.not_supported(request))}
 
         }
     }
@@ -98,16 +98,16 @@ impl FactsAction {
 
         }
         handle.host.write().unwrap().update_facts(&facts);
-        return Ok(());
+        Ok(())
     }
 
-    fn insert_string(&self, mapping: &Arc<RwLock<serde_yaml::Mapping>>, key: &String, value: &String) {
-        mapping.write().unwrap().insert(serde_yaml::Value::String(key.clone()), serde_yaml::Value::String(value.clone())); 
+    fn insert_string(&self, mapping: &Arc<RwLock<serde_yaml::Mapping>>, key: &str, value: &str) {
+        mapping.write().unwrap().insert(serde_yaml::Value::String(key.to_owned()), serde_yaml::Value::String(value.to_owned())); 
     }
 
-    fn insert_json(&self, mapping: &Arc<RwLock<serde_yaml::Mapping>>, key: &String, value: &String) -> Result<(), String> {
+    fn insert_json(&self, mapping: &Arc<RwLock<serde_yaml::Mapping>>, key: &str, value: &str) -> Result<(), String> {
         match serde_json::from_str(value) {
-            Ok(json) => { mapping.write().unwrap().insert(serde_yaml::Value::String(key.clone()), json); Ok(()) }
+            Ok(json) => { mapping.write().unwrap().insert(serde_yaml::Value::String(key.to_owned()), json); Ok(()) }
             Err(y) => Err(format!("error processing fact JSON: {:?}", y))
         }
     }
@@ -115,13 +115,13 @@ impl FactsAction {
     fn do_mac_facts(&self, _handle: &Arc<TaskHandle>, _request: &Arc<TaskRequest>, mapping: &Arc<RwLock<serde_yaml::Mapping>>) -> Result<(), Arc<TaskResponse>> {
         self.insert_string(mapping, &String::from("jet_os_type"), &String::from("MacOS"));
         self.insert_string(mapping, &String::from("jet_os_flavor"), &String::from("OSX"));
-        return Ok(());
+        Ok(())
     }
 
     fn do_linux_facts(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, mapping: &Arc<RwLock<serde_yaml::Mapping>>) -> Result<(), Arc<TaskResponse>> {
         self.insert_string(mapping, &String::from("jet_os_type"), &String::from("Linux"));
         self.do_linux_os_release(handle, request, mapping)?;
-        return Ok(());
+        Ok(())
     }
 
     fn do_linux_os_release(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, mapping: &Arc<RwLock<serde_yaml::Mapping>>) -> Result<(), Arc<TaskResponse>> {
@@ -142,21 +142,19 @@ impl FactsAction {
                 let mut k1 = key.unwrap().trim().to_string();
                 k1.make_ascii_lowercase();
                 let v1 = value.unwrap().trim().to_string().replace("\"","");
-                self.insert_string(mapping, &format!("jet_os_release_{}", k1.to_string()), &v1.clone());
+                self.insert_string(mapping, &format!("jet_os_release_{}", k1), &v1.clone());
                 if k1.eq("id_like") {
-                    if v1.find("rhel").is_some() {
+                    if v1.contains("rhel") {
                         self.insert_string(mapping, &String::from("jet_os_flavor"), &String::from("EL"));
-                    } else if v1.find("debian").is_some() {
+                    } else if v1.contains("debian") {
                         self.insert_string(mapping, &String::from("jet_os_flavor"), &String::from("Debian"))
-                    } else if v1.find("arch").is_some() {
+                    } else if v1.contains("arch") {
                         self.insert_string(mapping, &String::from("jet_os_flavor"), &String::from("Arch"))
                     }
                 }
                 // if /etc/os-release does not have ID_LIKE line, like Archlinux
-                if k1.eq("id") {
-                    if v1.find("arch").is_some() {
-                        self.insert_string(mapping, &String::from("jet_os_flavor"), &String::from("Arch"));
-                    }
+                if k1.eq("id") && v1.contains("arch") {
+                    self.insert_string(mapping, &String::from("jet_os_flavor"), &String::from("Arch"));
                 }
             }
         }
@@ -164,7 +162,7 @@ impl FactsAction {
         if ! mapping.read().unwrap().contains_key("jet_os_flavor") {
             self.insert_string(mapping, &String::from("jet_os_flavor"), &String::from("Unknown"))
         }
-        return Ok(());
+        Ok(())
     }
 
     fn do_arch(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, mapping: &Arc<RwLock<serde_yaml::Mapping>>) -> Result<(), Arc<TaskResponse>> {
@@ -175,27 +173,27 @@ impl FactsAction {
         };
         let result = handle.remote.run(request, &cmd, CheckRc::Checked)?;
         let (_rc, out) = cmd_info(&result);
-        self.insert_string(mapping, &String::from("jet_arch"), &String::from(out));
-        return Ok(());
+        self.insert_string(mapping, &String::from("jet_arch"), &out);
+        Ok(())
     }
 
     fn do_facter(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, mapping: &Arc<RwLock<serde_yaml::Mapping>>) -> Result<(), Arc<TaskResponse>> {
         let result = handle.remote.run(request, &String::from("facter --json"), CheckRc::Checked)?;
         let (_rc, out) = cmd_info(&result);
-        match self.insert_json(mapping, &String::from("facter"), &String::from(out)) {
+        match self.insert_json(mapping, &String::from("facter"), &out) {
             Ok(_) => {},
             Err(_) => { return Err(handle.response.is_failed(request, &String::from("failed to parse facter output"))) }
         }
-        return Ok(());    }
+        Ok(())}
 
     fn do_ohai(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, mapping: &Arc<RwLock<serde_yaml::Mapping>>) -> Result<(), Arc<TaskResponse>> {
         let result = handle.remote.run(request, &String::from("ohai"), CheckRc::Checked)?;
         let (_rc, out) = cmd_info(&result);
-        match self.insert_json(mapping, &String::from("ohai"), &String::from(out)) {
+        match self.insert_json(mapping, &String::from("ohai"), &out) {
             Ok(_) => {},
             Err(_) => { return Err(handle.response.is_failed(request, &String::from("failed to parse ohai output"))) }
         }
-        return Ok(());
+        Ok(())
     }
 
 }

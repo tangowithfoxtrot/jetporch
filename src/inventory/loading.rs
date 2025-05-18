@@ -44,6 +44,7 @@ pub struct YamlGroup {
 #[derive(Debug,Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum DynamicInventoryJson {
+    #[allow(dead_code)] // TODO: investigate
     Entry(HashMap<String, DynamicInventoryJsonEntry>)
 }
 
@@ -71,26 +72,24 @@ pub fn load_inventory(inventory: &Arc<RwLock<Inventory>>, inventory_paths: Arc<R
     for inventory_path_buf in inventory_paths.read().unwrap().iter() {
         let inventory_path = inventory_path_buf.as_path();
         if inventory_path.is_dir() {
-            let groups_pathbuf      = inventory_path_buf.join("groups");
-            let groups_path         = groups_pathbuf.as_path();
+            let groups_pathbuf = inventory_path_buf.join("groups");
+            let groups_path = groups_pathbuf.as_path();
 
             if groups_path.exists() && groups_path.is_dir() {
-                load_on_disk_inventory_tree(inventory, true, &inventory_path)?;
+                load_on_disk_inventory_tree(inventory, true, inventory_path)?;
             } else {
                 return Err(format!("missing groups/ in --inventory path parameter ({})", inventory_path.display()))
             }
+        } else if is_executable(inventory_path) {
+            load_dynamic_inventory(inventory, inventory_path)?;
+            let dirname = directory_as_string(inventory_path);
+            let dir = Path::new(&dirname);
+            load_on_disk_inventory_tree(inventory, false, dir)?;
         } else {
-            if is_executable(&inventory_path) {
-                load_dynamic_inventory(inventory, &inventory_path)?;
-                let dirname = directory_as_string(&inventory_path);
-                let dir = Path::new(&dirname);
-                load_on_disk_inventory_tree(inventory, false, &dir)?;
-            } else {
-                return Err(format!("non-directory path to --inventory ({}) is not executable", inventory_path.display()))
-            }    
+            return Err(format!("non-directory path to --inventory ({}) is not executable", inventory_path.display()))
         }
     }
-    return Ok(())
+    Ok(())
 }
 
 // ==============================================================================================================
@@ -110,19 +109,19 @@ fn load_on_disk_inventory_tree(inventory: &Arc<RwLock<Inventory>>, include_group
         load_groups_directory(inventory, &groups_path)?;
     }
     if group_vars_path.exists() {
-        load_vars_directory(inventory, &group_vars_path, true)?;
+        load_vars_directory(inventory, group_vars_path, true)?;
     }
     if host_vars_path.exists() {
-        load_vars_directory(inventory, &host_vars_path, false)?;
+        load_vars_directory(inventory, host_vars_path, false)?;
     }
-    return Ok(())
+    Ok(())
 }
 
 // for inventory/groups/* files
 fn load_groups_directory(inventory: &Arc<RwLock<Inventory>>, path: &Path) -> Result<(), String> {
     path_walk(path, |groups_file_path| {
 
-        let mut group_name = path_basename_as_string(&groups_file_path).clone();
+        let mut group_name = path_basename_as_string(groups_file_path).clone();
 
         // skip dot files and backup files
         if group_name.ends_with("~") || group_name.starts_with(".") {
@@ -134,11 +133,12 @@ fn load_groups_directory(inventory: &Arc<RwLock<Inventory>>, path: &Path) -> Res
             group_name = group_name[0 .. group_name.len() - 4].to_string();
         }
 
-        let groups_file = jet_file_open(&groups_file_path)?;
+        let groups_file = jet_file_open(groups_file_path)?;
         let groups_file_parse_result: Result<YamlGroup, serde_yaml::Error> = serde_yaml::from_reader(groups_file);
-        if groups_file_parse_result.is_err() {
-            show_yaml_error_in_context(&groups_file_parse_result.unwrap_err(), &groups_file_path);
-            return Err(format!("edit the file and try again?"));
+
+        if let Err(e) = groups_file_parse_result {
+            show_yaml_error_in_context(&e, groups_file_path);
+            return Err("edit the file and try again?".to_string());
         }   
         let yaml_result = groups_file_parse_result.unwrap();
         add_group_file_contents_to_inventory(inventory, group_name.clone(), &yaml_result);
@@ -176,7 +176,7 @@ fn load_vars_directory(inventory: &Arc<RwLock<Inventory>>, path: &Path, is_group
 
     path_walk(path, |vars_path| {
 
-        let mut effective_name = path_basename_as_string(&vars_path).clone();
+        let mut effective_name = path_basename_as_string(vars_path).clone();
         // skip dot files and backup files
         if effective_name.ends_with("~") || effective_name.starts_with(".") {
             return Ok(());
@@ -195,11 +195,11 @@ fn load_vars_directory(inventory: &Arc<RwLock<Inventory>>, path: &Path, is_group
             }
         }
         
-        let file = jet_file_open(&vars_path)?;
+        let file = jet_file_open(vars_path)?;
         let file_parse_result: Result<serde_yaml::Mapping, serde_yaml::Error> = serde_yaml::from_reader(file);
-        if file_parse_result.is_err() {
-             show_yaml_error_in_context(&file_parse_result.unwrap_err(), &vars_path);
-             return Err(format!("edit the file and try again?"));
+        if let Err(e) = file_parse_result {
+             show_yaml_error_in_context(&e, vars_path);
+             return Err("edit the file and try again?".to_string());
         } 
         let yaml_result = file_parse_result.unwrap();
         
@@ -258,9 +258,9 @@ fn load_dynamic_inventory(inv: &Arc<RwLock<Inventory>>, path: &Path) -> Result<(
         if entry.hostvars.is_some() {
             let hostvars = entry.hostvars.as_ref().unwrap();
             for (host_name, values) in hostvars.iter() {
-                inventory.store_host(&group_name, &host_name);
-                let host = inventory.get_host(&host_name);
-                let vars = convert_json_vars(&values);
+                inventory.store_host(&group_name, host_name);
+                let host = inventory.get_host(host_name);
+                let vars = convert_json_vars(values);
                 let mut hst = host.write().unwrap();
                 hst.update_variables(vars);
             }
@@ -268,14 +268,14 @@ fn load_dynamic_inventory(inv: &Arc<RwLock<Inventory>>, path: &Path) -> Result<(
         if entry.hosts.is_some() {
             let hosts = entry.hosts.as_ref().unwrap();
             for host_name in hosts.iter() {
-                inventory.store_host(&group_name, &host_name);
+                inventory.store_host(&group_name, host_name);
 
             }
         }
         if entry.children.as_ref().is_some() {
             let subgroups = entry.children.as_ref().unwrap();
             for subgroup_name in subgroups.iter() {
-                inventory.store_subgroup(&group_name, &subgroup_name);
+                inventory.store_subgroup(&group_name, subgroup_name);
             }
         }
         if entry.vars.as_ref().is_some() {
@@ -292,7 +292,7 @@ pub fn convert_json_vars(input: &serde_json::Value) -> serde_yaml::Mapping {
     let json = input.to_string();
     let parse_result: Result<serde_yaml::Mapping, serde_yaml::Error> = serde_yaml::from_str(&json);
     match parse_result {
-       Ok(parsed) => return parsed.clone(),
+       Ok(parsed) => parsed.clone(),
        Err(y) => panic!("unable to load JSON back to YAML (1), this shouldn't happen: {}", y)
     } 
 }

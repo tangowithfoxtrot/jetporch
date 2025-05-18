@@ -50,9 +50,9 @@ pub struct Host {
 
 impl Host {
 
-    pub fn new(name: &String) -> Self {
+    pub fn new(name: &str) -> Self {
         Self {
-            name: name.clone(),
+            name: name.to_owned(),
             variables : serde_yaml::Mapping::new(),
             groups: HashMap::new(),
             os_type: None,
@@ -64,25 +64,23 @@ impl Host {
         }
     }
 
-    pub fn notify(&mut self, play_number: usize, signal: &String) {
-        if ! self.notified_handlers.contains_key(&play_number) {
-            self.notified_handlers.insert(play_number, HashSet::new());
-        }
+    pub fn notify(&mut self, play_number: usize, signal: &str) {
+        self.notified_handlers.entry(play_number).or_default();
         let entry = self.notified_handlers.get_mut(&play_number).unwrap();
-        entry.insert(signal.clone());
+        entry.insert(signal.to_owned());
     }
 
-    pub fn is_notified(&self, play_number: usize, signal: &String) -> bool {
+    pub fn is_notified(&self, play_number: usize, signal: &str) -> bool {
         let entry = self.notified_handlers.get(&play_number);
-        if entry.is_none() {
-            return false;
+        if let Some(e) = entry  {
+            e.contains(&signal.to_owned())
         } else {
-            return entry.unwrap().contains(&signal.clone());
+            false
         }
     }
 
-    pub fn set_checksum_cache(&mut self, path: &String, checksum: &String) {
-        self.checksum_cache.insert(path.clone(), checksum.clone());
+    pub fn set_checksum_cache(&mut self, path: &str, checksum: &str) {
+        self.checksum_cache.insert(path.to_owned(), checksum.to_owned());
     }
 
     pub fn get_checksum_cache(&mut self, task_id: usize, path: &String) -> Option<String> {
@@ -92,10 +90,10 @@ impl Host {
         }
         if self.checksum_cache.contains_key(path) {
             let result = self.checksum_cache.get(path).unwrap();
-            return Some(result.clone());
+            Some(result.clone())
         }
         else {
-            return None;
+            None
         }
     }
 
@@ -106,7 +104,7 @@ impl Host {
         else {
             return Err(format!("OS Type could not be detected from uname -a: {}", uname_output));
         }
-        return Ok(());
+        Ok(())
     }
 
     // ==============================================================================================================
@@ -116,9 +114,9 @@ impl Host {
     pub fn get_groups(&self) -> HashMap<String, Arc<RwLock<Group>>> {
         let mut results : HashMap<String, Arc<RwLock<Group>>> = HashMap::new();
         for (k,v) in self.groups.iter() {
-            results.insert(k.clone(), Arc::clone(&v));
+            results.insert(k.clone(), Arc::clone(v));
         }
-        return results;
+        results
     }
 
     pub fn has_group(&self, group_name: &String) -> bool {
@@ -127,7 +125,7 @@ impl Host {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     // get_ancestor_groups(&self, depth_limit: usize) -> HashMap<String, Arc<RwLock<Group>>>
@@ -143,15 +141,15 @@ impl Host {
                 }
             }
         }
-        return false;
+        false
     }
 
     pub fn get_group_names(&self) -> Vec<String> {
-        return self.get_groups().iter().map(|(k,_v)| k.clone()).collect();
+        self.get_groups().keys().cloned().collect()
     }
 
-    pub fn add_group(&mut self, name: &String, group: Arc<RwLock<Group>>) {
-        self.groups.insert(name.clone(), Arc::clone(&group));
+    pub fn add_group(&mut self, name: &str, group: Arc<RwLock<Group>>) {
+        self.groups.insert(name.to_owned(), Arc::clone(&group));
     }
 
     pub fn get_ancestor_groups(&self, depth_limit: usize) -> HashMap<String, Arc<RwLock<Group>>> {
@@ -163,15 +161,15 @@ impl Host {
                 results.insert(k2, Arc::clone(&v2)); 
             }
         }
-        return results;
+        results
     }
 
     pub fn get_ancestor_group_names(&self) -> Vec<String> {
-        return self.get_ancestor_groups(20usize).iter().map(|(k,_v)| k.clone()).collect();
+        self.get_ancestor_groups(20usize).keys().cloned().collect()
     }
 
     pub fn get_variables(&self) -> serde_yaml::Mapping {
-        return self.variables.clone();
+        self.variables.clone()
     }
 
     pub fn set_variables(&mut self, variables: serde_yaml::Mapping) {
@@ -194,7 +192,7 @@ impl Host {
         let mine = serde_yaml::Value::from(self.get_variables());
         blend_variables(&mut blended, mine);
         blend_variables(&mut blended, self.facts.clone());
-        return match blended {
+        match blended {
             serde_yaml::Value::Mapping(x) => x,
             _ => panic!("get_blended_variables produced a non-mapping (1)")
         }
@@ -211,7 +209,7 @@ impl Host {
 
     pub fn get_variables_yaml(&self) -> Result<String, String> {
         let result = serde_yaml::to_string(&self.get_variables());
-        return match result {
+        match result {
             Ok(x) => Ok(x),
             Err(_y) => Err(String::from("error loading variables"))
         }
@@ -219,7 +217,7 @@ impl Host {
 
     pub fn get_blended_variables_yaml(&self) -> Result<String,String> {
         let result = serde_yaml::to_string(&self.get_blended_variables());
-        return match result {
+        match result {
             Ok(x) => Ok(x),
             Err(_y) => Err(String::from("error loading blended variables"))
         }

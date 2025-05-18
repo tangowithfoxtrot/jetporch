@@ -49,10 +49,10 @@ pub enum Recurse {
 impl FileAttributesInput {
 
     // given an octal string, like 0o755 or 755, return the numeric value
-    pub fn is_octal_string(mode: &String) -> bool {
-        let octal_no_prefix = str::replace(&mode, "0o", "");
+    pub fn is_octal_string(mode: &str) -> bool {
+        let octal_no_prefix = str::replace(mode, "0o", "");
         // this error should be screened out by template() below already but return types are important.
-        return match i32::from_str_radix(&octal_no_prefix, 8) {
+        match i32::from_str_radix(&octal_no_prefix, 8) {
             Ok(_x) => true,
             Err(_y) => false 
         }
@@ -92,11 +92,9 @@ impl FileAttributesInput {
 
         if input2.mode.is_some()  { 
             let mode_input = input2.mode.as_ref().unwrap();
-            let templated_mode_string = handle.template.string(request, tm, &String::from("mode"), &mode_input)?;
+            let templated_mode_string = handle.template.string(request, tm, &String::from("mode"), mode_input)?;
             if ! templated_mode_string.starts_with("0o") {
-                return Err(handle.response.is_failed(request, &String::from(
-                    format!("(a) field (mode) must have an octal-prefixed value of form 0o755, was {}", templated_mode_string)
-                )));
+                return Err(handle.response.is_failed(request, &format!("(a) field (mode) must have an octal-prefixed value of form 0o755, was {}", templated_mode_string)));
             }
 
             let octal_no_prefix = str::replace(&templated_mode_string, "0o", "");
@@ -109,9 +107,7 @@ impl FileAttributesInput {
                     final_mode_value = Some(octal_no_prefix);
                 },
                 Err(_y) => { 
-                    return Err(handle.response.is_failed(request, &String::from(
-                        format!("(b) field (mode) must have an octal-prefixed value of form 0o755, was {}", templated_mode_string)
-                    )));
+                    return Err(handle.response.is_failed(request, &format!("(b) field (mode) must have an octal-prefixed value of form 0o755, was {}", templated_mode_string)));
                 }
             };
         } else {
@@ -119,11 +115,11 @@ impl FileAttributesInput {
             final_mode_value = None;
         }
 
-        return Ok(Some(FileAttributesEvaluated {
+        Ok(Some(FileAttributesEvaluated {
             owner:         handle.template.string_option_no_spaces(request, tm, &String::from("owner"), &input2.owner)?,
             group:         handle.template.string_option_no_spaces(request, tm, &String::from("group"), &input2.group)?,
             mode:          final_mode_value,
-        }));
+        }))
     }
 }
 

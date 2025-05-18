@@ -35,8 +35,9 @@ pub trait IsTask : Send + Sync {
     
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>>;
 
+    #[allow(dead_code)] // FIXME: remove this if it has no use
     fn get_display_name(&self) -> String {
-        return match self.get_name() {
+        match self.get_name() {
             Some(x) => x,
             _ => self.get_module()
         }

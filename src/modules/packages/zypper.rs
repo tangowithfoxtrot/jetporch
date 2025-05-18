@@ -48,25 +48,25 @@ impl IsTask for ZypperTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(ZypperAction {
                     package:    handle.template.string_no_spaces(request, tm, &String::from("package"), &self.package)?,
-                    version:    handle.template.string_option_no_spaces(&request, tm, &String::from("version"), &self.version)?,
-                    update:     handle.template.boolean_option_default_false(&request, tm, &String::from("update"), &self.update)?,
-                    remove:     handle.template.boolean_option_default_false(&request, tm, &String::from("remove"), &self.remove)?
+                    version:    handle.template.string_option_no_spaces(request, tm, &String::from("version"), &self.version)?,
+                    update:     handle.template.boolean_option_default_false(request, tm, &String::from("update"), &self.update)?,
+                    remove:     handle.template.boolean_option_default_false(request, tm, &String::from("remove"), &self.remove)?
                 }),
-                with: Arc::new(PreLogicInput::template(&handle, &request, tm, &self.with)?),
-                and: Arc::new(PostLogicInput::template(&handle, &request, tm, &self.and)?)
+                with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
+                and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?)
             }
-        );
+        )
     }
 
 }
 
 impl IsAction for ZypperAction {
     fn dispatch(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>, Arc<TaskResponse>> {
-        return self.common_dispatch(handle,request);
+        self.common_dispatch(handle,request)
     }
 }
 
@@ -74,19 +74,19 @@ impl PackageManagementModule for ZypperAction {
 
     fn initial_setup(&self, _handle: &Arc<TaskHandle>, _request: &Arc<TaskRequest>) -> Result<(),Arc<TaskResponse>> {
         // nothing to do here, see how this was used in yum_dnf.rs
-        return Ok(());
+        Ok(())
     }
 
     fn is_update(&self) -> bool {
-        return self.update;
+        self.update
     }
 
     fn is_remove(&self) -> bool {
-        return self.remove; 
+        self.remove
     }
 
     fn get_version(&self) -> Option<String> {
-        return self.version.clone();
+        self.version.clone()
     }
 
     fn get_remote_version(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
@@ -110,7 +110,7 @@ impl PackageManagementModule for ZypperAction {
     fn get_local_version(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
         let cmd = format!("zypper --non-interactive --quiet search --match-exact --details --installed-only '{}'", self.package);
         let result = handle.remote.run(request, &cmd, CheckRc::Unchecked);
-        return match result {
+        match result {
             Ok(r) => {
                 let (rc,out) = cmd_info(&r);
                 if rc == 104 {
@@ -130,7 +130,7 @@ impl PackageManagementModule for ZypperAction {
             Some(version) => format!("zypper --non-interactive --quiet  install '{}={}'", self.package, version),
             None => format!("zypper --non-interactive --quiet install '{}'", self.package),
         };
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
 
     fn update_package(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
@@ -138,12 +138,12 @@ impl PackageManagementModule for ZypperAction {
             Some(version) => format!("zypper --non-interactive --quiet update '{}={}'", self.package, version),
             None => format!("zypper --non-interactive --quiet update '{}'", self.package),
         };
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
 
     fn remove_package(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
         let cmd = format!("zypper --non-interactive --quiet remove '{}'", self.package);
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
 
 }
@@ -168,10 +168,10 @@ impl ZypperAction {
             Some(r) => r,
             None => return Err(handle.response.is_failed(request, &format!("unable to parse unexpected output from zypper (1): {}", out)))
         };
-        return match row.split("|").nth(3) {
+        match row.split("|").nth(3) {
             Some(version) => Ok(Some(PackageDetails { name: self.package.clone(), version: version.trim().to_string() })),
             None => Err(handle.response.is_failed(request, &format!("unable to parse unexpected output from zypper (2): {}", out)))
-        };
+        }
     }
 
 }

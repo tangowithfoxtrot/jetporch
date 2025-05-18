@@ -44,7 +44,7 @@ impl IsTask for DebugTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(DebugAction {
                     name: self.name.clone().unwrap_or(String::from(MODULE)),
@@ -53,7 +53,7 @@ impl IsTask for DebugTask {
                 with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
                 and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?),
             }
-        );
+        )
     }
 }
 
@@ -64,7 +64,7 @@ impl IsAction for DebugAction {
         match request.request_type {
 
             TaskRequestType::Query => {
-                return Ok(handle.response.needs_passive(request));
+                Ok(handle.response.needs_passive(request))
             },
 
             TaskRequestType::Passive => {
@@ -76,19 +76,17 @@ impl IsAction for DebugAction {
                         serde_yaml::Value::String(s) => s.clone(),
                         _ => { panic!("invalid key in mapping"); }
                     };
-                    if no_vars || self.vars.as_ref().unwrap().contains(&k2) {
-                        if ! k2.eq(&String::from("item")) {
-                            map.insert(k.clone(), v.clone());
-                        }
+                    if (no_vars || self.vars.as_ref().unwrap().contains(&k2)) && ! k2.eq(&String::from("item")) {
+                        map.insert(k.clone(), v.clone());
                     }
                 }
                 let msg = serde_yaml::to_string(&map).unwrap();
                 let msg2 = format!("\n{}\n", msg);
                 handle.debug(request, &msg2);
-                return Ok(handle.response.is_passive(request));
+                Ok(handle.response.is_passive(request))
             },
 
-            _ => { return Err(handle.response.not_supported(request)); }
+            _ => { Err(handle.response.not_supported(request))}
 
         }
 

@@ -30,7 +30,7 @@ static HANDLEBARS: Lazy<Handlebars> = Lazy::new(|| {
     hb.register_escape_fn(handlebars::no_escape);
     hb.set_strict_mode(true);
     register_helpers(&mut hb);
-    return hb;
+    hb
 });
 
 // 'off' mode is used in a bit of a weird traversal/engine
@@ -50,19 +50,18 @@ pub struct Templar {
 impl Templar {
 
     pub fn new() -> Self {
-        return Self {
-        };
+        Self {}
     }
 
     // evaluate a string
 
-    pub fn render(&self, template: &String, data: serde_yaml::Mapping, template_mode: TemplateMode) -> Result<String, String> {
+    pub fn render(&self, template: &str, data: serde_yaml::Mapping, template_mode: TemplateMode) -> Result<String, String> {
         let result : Result<String, RenderError> = match template_mode {
             TemplateMode::Strict => HANDLEBARS.render_template(template, &data),
             /* this is only used to get back the raw 'items' collection inside the task FSM */
             TemplateMode::Off => Ok(String::from("empty"))
         };
-        return match result {
+        match result {
             Ok(x) => {
                 Ok(x)
             },
@@ -85,20 +84,20 @@ impl Templar {
         match result {
             Ok(x) => { 
                 if x.as_str().eq("true") {
-                    return Ok(true);
+                    Ok(true)
                 } else {
-                    return Ok(false);
+                    Ok(false)
                 }
             },
             Err(y) => { 
-                if y.find("Couldn't read parameter").is_some() {
-                    return Err(format!("failed to parse conditional: {}: one or more parameters may be undefined", expr))
+                if y.contains("Couldn't read parameter") {
+                    Err(format!("failed to parse conditional: {}: one or more parameters may be undefined", expr))
                 }
                 else {
-                    return Err(format!("failed to parse conditional: {}: {}", expr, y))
+                    Err(format!("failed to parse conditional: {}: {}", expr, y))
                 }
             }
-        };
+        }
     }
 
 }

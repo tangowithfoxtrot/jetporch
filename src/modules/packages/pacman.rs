@@ -17,7 +17,7 @@
 use crate::tasks::*;
 use crate::handle::handle::{TaskHandle,CheckRc};
 use crate::modules::packages::common::{PackageManagementModule,PackageDetails};
-use serde::{Deserialize};
+use serde::Deserialize;
 use std::sync::Arc;
 
 const MODULE: &str = "pacman";
@@ -48,43 +48,43 @@ impl IsTask for PacmanTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(PacmanAction {
                     package:    handle.template.string_no_spaces(request, tm, &String::from("package"), &self.package)?,
-                    version:    handle.template.string_option_no_spaces(&request, tm, &String::from("version"), &self.version)?,
-                    update:     handle.template.boolean_option_default_false(&request, tm, &String::from("update"), &self.update)?,
-                    remove:     handle.template.boolean_option_default_false(&request, tm, &String::from("remove"), &self.remove)?
+                    version:    handle.template.string_option_no_spaces(request, tm, &String::from("version"), &self.version)?,
+                    update:     handle.template.boolean_option_default_false(request, tm, &String::from("update"), &self.update)?,
+                    remove:     handle.template.boolean_option_default_false(request, tm, &String::from("remove"), &self.remove)?
                 }),
-                with: Arc::new(PreLogicInput::template(&handle, &request, tm, &self.with)?),
-                and: Arc::new(PostLogicInput::template(&handle, &request, tm, &self.and)?)
+                with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
+                and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?)
             }
-        );
+        )
     }
 }
 
 impl IsAction for PacmanAction {
     fn dispatch(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>, Arc<TaskResponse>> {
-        return self.common_dispatch(handle,request);
+        self.common_dispatch(handle,request)
     }
 }
 
 impl PackageManagementModule for PacmanAction {
 
     fn is_update(&self) -> bool {
-        return self.update;
+        self.update
     }
 
     fn is_remove(&self) -> bool {
-        return self.remove; 
+        self.remove
     }
 
     fn get_version(&self) -> Option<String> {
-        return self.version.clone();
+        self.version.clone()
     }
 
     fn initial_setup(&self, _handle: &Arc<TaskHandle>, _request: &Arc<TaskRequest>) -> Result<(),Arc<TaskResponse>> {
-        return Ok(());
+        Ok(())
     }
 
     fn get_local_version(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
@@ -99,12 +99,12 @@ impl PackageManagementModule for PacmanAction {
             return Err(handle.response.is_failed(request, &String::from("pacman query failed")));
         }
         let details = self.parse_package_details(&out.clone());
-        return Ok(details);
+        Ok(details)
     }
 
     fn get_remote_version(&self, _handle: &Arc<TaskHandle>, _request: &Arc<TaskRequest>) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
         // FIXME: (?) without this implemented this module will always return "Modified" with update: true
-        return Ok(None);
+        Ok(None)
     }
 
     fn install_package(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>>{
@@ -112,7 +112,7 @@ impl PackageManagementModule for PacmanAction {
             true => format!("pacman -S '{}' --noconfirm --noprogressbar --needed", self.package),
             false => format!("pacman -S '{}={}' --noconfirm --noprogressbar --needed", self.package, self.version.as_ref().unwrap())
         };
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
 
     fn update_package(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>>{
@@ -121,13 +121,13 @@ impl PackageManagementModule for PacmanAction {
             true => format!("pacman -Syu '{}' --quiet --noconfirm", actual_package),
             false => format!("pacman -Syu '{}={}' --quiet --noconfirm", self.package, self.version.as_ref().unwrap())
         };
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
 
     fn remove_package(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>>{
         let actual_package = self.get_actual_package();
         let cmd = format!("pacman -R '{}' --noconfirm --noprogressbar", actual_package);
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
 
 }
@@ -142,11 +142,11 @@ impl PacmanAction {
                 None => self.package.clone() // should be impossible, appease compiler
             } 
         } else {
-            return self.package.clone()
+            self.package.clone()
         }
     }
 
-    pub fn parse_package_details(&self, out: &String) -> Option<PackageDetails> {
+    pub fn parse_package_details(&self, out: &str) -> Option<PackageDetails> {
         let mut name: Option<String> = None;
         let mut version: Option<String> = None;
         for line in out.lines() {
@@ -164,10 +164,9 @@ impl PacmanAction {
                 if key2.eq("Version") { version = Some(value2.to_string()); break; }
             }
         }
-        if name.is_some() && version.is_some() {
-            return Some(PackageDetails { name: name.unwrap().clone(), version: version.unwrap().clone() });
-        } else {
-            return None;
+        match name.is_some() && version.is_some() {
+            true => Some(PackageDetails { name: name.unwrap().clone(), version: version.unwrap().clone() }),
+            false => None,
         }
     }
 

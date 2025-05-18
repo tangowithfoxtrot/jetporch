@@ -33,27 +33,27 @@ use crate::tasks::files::Recurse;
 // any argument that allows spaces (such as paths) should be the *last*
 // command in any command sequence.
 
-pub fn screen_path(path: &String) -> Result<String,String> {
+pub fn screen_path(path: &str) -> Result<String,String> {
     // NOTE: this only checks paths used in commands
     let path2 = path.trim().to_string();
     let path3 = screen_general_input_strict(&path2)?;
-    return Ok(path3.to_string());
+    Ok(path3.to_string())
 }
 
 // this filtering is applied to all shell arguments in the command library below (if not, it's an error)
 // but is automatically also applied to all template calls not marked _unsafe in the evaluate() stages
 // of modules. We run everything twice to prevent module coding errors.
 
-pub fn screen_general_input_strict(input: &String) -> Result<String,String> {
+pub fn screen_general_input_strict(input: &str) -> Result<String,String> {
     let input2 = input.trim();
     let bad = vec![ ";", "{", "}", "(", ")", "<", ">", "&", "*", "|", "=", "?", "[", "]", "$", "%", "`"];
 
     for invalid in bad.iter() {
-        if input2.find(invalid).is_some() {
-            return Err(format!("illegal characters found: {} ('{}')", input2, invalid.to_string()));
+        if input2.contains(invalid) {
+            return Err(format!("illegal characters found: {} ('{}')", input2, invalid));
         }
     }
-    return Ok(input2.to_string());
+    Ok(input2.to_string())
 }
 
 // a slightly lighter version of checking, that allows = signs and such
@@ -62,108 +62,109 @@ pub fn screen_general_input_strict(input: &String) -> Result<String,String> {
 // (parameters) are already sufficiently screened for things that can break shell commands and arguments
 // are already quoted.
 
-pub fn screen_general_input_loose(input: &String) -> Result<String,String> {
+pub fn screen_general_input_loose(input: &str) -> Result<String,String> {
     let input2 = input.trim();
-    let bad = vec![ ";", "<", ">", "&", "*", "?", "{", "}", "[", "]", "$", "`"];
+    let bad = [";", "<", ">", "&", "*", "?", "{", "}", "[", "]", "$", "`"];
     for invalid in bad.iter() {
-        if input2.find(invalid).is_some() {
-            return Err(format!("illegal characters detected: {} ('{}')", input2, invalid.to_string()));
+        if input2.contains(invalid) {
+            return Err(format!("illegal characters detected: {} ('{}')", input2, invalid));
         }
     }
-    return Ok(input2.to_string());
+    Ok(input2.to_string())
 }
 
 // require that octal inputs be ... octal
 
-pub fn screen_mode(mode: &String) -> Result<String,String> {
-    if FileAttributesInput::is_octal_string(&mode) {
-        return Ok(mode.clone());
+pub fn screen_mode(mode: &str) -> Result<String,String> {
+    if FileAttributesInput::is_octal_string(mode) {
+        Ok(mode.to_owned())
     } else {
-        return Err(format!("not an octal string: {}", mode));
+        Err(format!("not an octal string: {}", mode))
     }
 }
 
-pub fn get_mode_command(os_type: HostOSType, untrusted_path: &String) -> Result<String,String>  {
+pub fn get_mode_command(os_type: HostOSType, untrusted_path: &str) -> Result<String,String>  {
     let path = screen_path(untrusted_path)?;
-    return match os_type {
+    match os_type {
         HostOSType::Linux => Ok(format!("stat --format '%a' '{}'", path)),
         HostOSType::MacOS => Ok(format!("stat -f '%A' '{}'", path)),
     }
 }
 
-pub fn get_sha512_command(os_type: HostOSType, untrusted_path: &String) -> Result<String,String>  {
+pub fn get_sha512_command(os_type: HostOSType, untrusted_path: &str) -> Result<String,String>  {
     let path = screen_path(untrusted_path)?;
-    return match os_type {
+    match os_type {
         HostOSType::Linux => Ok(format!("sha512sum '{}'", path)),
         HostOSType::MacOS => Ok(format!("shasum -b -a 512 '{}'", path)),
     }
 }
 
-pub fn get_ownership_command(_os_type: HostOSType, untrusted_path: &String) -> Result<String,String>  {
+pub fn get_ownership_command(_os_type: HostOSType, untrusted_path: &str) -> Result<String,String>  {
     let path = screen_path(untrusted_path)?;
-    return Ok(format!("ls -ld '{}'", path));
+    Ok(format!("ls -ld '{}'", path))
 }
 
-pub fn get_is_directory_command(_os_type: HostOSType, untrusted_path: &String) -> Result<String,String>  {
+pub fn get_is_directory_command(_os_type: HostOSType, untrusted_path: &str) -> Result<String,String>  {
     let path = screen_path(untrusted_path)?;
-    return Ok(format!("ls -ld '{}'", path));
+    Ok(format!("ls -ld '{}'", path))
 }
 
-pub fn get_touch_command(_os_type: HostOSType, untrusted_path: &String) -> Result<String,String>  {
+pub fn get_touch_command(_os_type: HostOSType, untrusted_path: &str) -> Result<String,String>  {
     let path = screen_path(untrusted_path)?;
-    return Ok(format!("touch '{}'", path));
+    Ok(format!("touch '{}'", path))
 }
 
-pub fn get_create_directory_command(_os_type: HostOSType, untrusted_path: &String) -> Result<String,String>  {
+pub fn get_create_directory_command(_os_type: HostOSType, untrusted_path: &str) -> Result<String,String>  {
     let path = screen_path(untrusted_path)?;
-    return Ok(format!("mkdir -p '{}'", path));
+    Ok(format!("mkdir -p '{}'", path))
 }
 
-pub fn get_delete_file_command(_os_type: HostOSType, untrusted_path: &String) -> Result<String,String>  {
+pub fn get_delete_file_command(_os_type: HostOSType, untrusted_path: &str) -> Result<String,String>  {
     let path = screen_path(untrusted_path)?;
-    return Ok(format!("rm -f '{}'", path));
+    Ok(format!("rm -f '{}'", path))
 }
 
-pub fn get_delete_directory_command(_os_type: HostOSType, untrusted_path: &String, recurse: Recurse) -> Result<String,String>  {
+pub fn get_delete_directory_command(_os_type: HostOSType, untrusted_path: &str, recurse: Recurse) -> Result<String,String>  {
     let path = screen_path(untrusted_path)?;
     match recurse {
-        Recurse::No  => { return Ok(format!("rmdir '{}'", path));  },
-        Recurse::Yes => { return Ok(format!("rm -rf '{}'", path)); }
+        Recurse::No  => { Ok(format!("rmdir '{}'", path))},
+        Recurse::Yes => { Ok(format!("rm -rf '{}'", path))}
     }
 }
 
-pub fn set_owner_command(_os_type: HostOSType, untrusted_path: &String, untrusted_owner: &String, recurse: Recurse) -> Result<String,String> {
+pub fn set_owner_command(_os_type: HostOSType, untrusted_path: &str, untrusted_owner: &str, recurse: Recurse) -> Result<String,String> {
     let path = screen_path(untrusted_path)?;
     let owner = screen_general_input_strict(untrusted_owner)?;
     match recurse {
-        Recurse::No   => { return Ok(format!("chown '{}' '{}'", owner, path));    },
-        Recurse::Yes  => { return Ok(format!("chown -R '{}' '{}'", owner, path)); }
+        Recurse::No   => { Ok(format!("chown '{}' '{}'", owner, path))},
+        Recurse::Yes  => { Ok(format!("chown -R '{}' '{}'", owner, path))}
     }
 }
 
-pub fn set_group_command(_os_type: HostOSType, untrusted_path: &String, untrusted_group: &String, recurse: Recurse) -> Result<String,String> {
+pub fn set_group_command(_os_type: HostOSType, untrusted_path: &str, untrusted_group: &str, recurse: Recurse) -> Result<String,String> {
     let path = screen_path(untrusted_path)?;
     let group = screen_general_input_strict(untrusted_group)?;
     match recurse {
-        Recurse::No   => { return Ok(format!("chgrp '{}' '{}'", group, path));    },
-        Recurse::Yes  => { return Ok(format!("chgrp -R '{}' '{}'", group, path)); }
+        Recurse::No   => { Ok(format!("chgrp '{}' '{}'", group, path))},
+        Recurse::Yes  => { Ok(format!("chgrp -R '{}' '{}'", group, path))}
     }
 }
 
-pub fn set_mode_command(_os_type: HostOSType, untrusted_path: &String, untrusted_mode: &String, recurse: Recurse) -> Result<String,String> {
+pub fn set_mode_command(_os_type: HostOSType, untrusted_path: &str, untrusted_mode: &str, recurse: Recurse) -> Result<String,String> {
     // mode generally does not have to be screened but someone could call a command directly without going through FileAttributes
     // so let's be thorough.
     let path = screen_path(untrusted_path)?;
     let mode = screen_mode(untrusted_mode)?;
     match recurse {
-        Recurse::No  => { return Ok(format!("chmod '{}' '{}'", mode, path));    },
-        Recurse::Yes => { return Ok(format!("chmod -R '{}' '{}'", mode, path)); }
+        Recurse::No  => { Ok(format!("chmod '{}' '{}'", mode, path))},
+        Recurse::Yes => { Ok(format!("chmod -R '{}' '{}'", mode, path))}
     }
 }
 
-pub fn get_arch_command(os_type: HostOSType) -> Result<String,String> {
+pub fn get_arch_command(os_type: HostOSType) -> Result<String, String> {
+    #[allow(clippy::match_single_binding)] // TODO: what was the intention of passing in os_type?
     match os_type {
-        _ => { return Ok(String::from("uname -m")) },
+        _ => { Ok(String::from("uname -m")) },
     }
 }
 

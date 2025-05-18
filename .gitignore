@@ -1,2 +1,3 @@
 /src/cli/version.rs
 target
+.scratch

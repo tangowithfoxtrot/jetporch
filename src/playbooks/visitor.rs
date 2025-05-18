@@ -74,38 +74,29 @@ impl PlaybookVisitor {
         };
 
         // TODO: make logfile location configurable by environment variable
-        let logfile : Option<Arc<RwLock<File>>> = match OpenOptions::new().write(true).create(true).append(true).open(logpath) {
+        let logfile : Option<Arc<RwLock<File>>> = match OpenOptions::new().create(true).append(true).open(logpath) {
             Ok(x) => Some(Arc::new(RwLock::new(x))),
             Err(_) => None
         };
 
-        let s = Self {
-            check_mode: check_mode,
-            logfile: logfile,
+        
+        Self {
+            check_mode,
+            logfile,
             utc_start: Utc::now(),
             run_id: GUID::rand().to_string()
-        };
-        s
+        }
     }
 
-    pub fn log_entry(&self, event: &String, context: Arc<RwLock<PlaybookContext>>) -> LogData {
+    pub fn log_entry(&self, event: &str, context: Arc<RwLock<PlaybookContext>>) -> LogData {
         let ctx = context.read().unwrap();
         LogData {
-            event: event.clone(),
+            event: event.to_owned(),
             play: ctx.play.clone(),
             playbook_path: ctx.playbook_path.clone(),
-            role: match &ctx.role {
-                Some(x) => Some(x.name.clone()),
-                None => None
-            },
-            task: match &ctx.task {
-                Some(x) => Some(x.clone()),
-                None => None
-            },
-            task_ct: match &ctx.task {
-                Some(_) => Some(ctx.task_count),
-                None => None
-            },
+            role: ctx.role.as_ref().map(|x| x.name.clone()),
+            task: ctx.task.clone(),
+            task_ct: ctx.task.as_ref().map(|_| ctx.task_count),
             cmd: None,
             cmd_rc: None,
             cmd_out: None,
@@ -135,9 +126,9 @@ impl PlaybookVisitor {
         if log.play.is_some()        { obj.insert(String::from("play"),        json!(log.play.clone().unwrap()));          }
         if log.role.is_some()        { obj.insert(String::from("role"),        json!(log.role.clone().unwrap()));          }
         if log.task.is_some()        { obj.insert(String::from("task"),        json!(log.task.clone().unwrap()));          }
-        if log.task.is_some()        { obj.insert(String::from("task_ct"),     json!(log.task_ct.clone().unwrap()));       }
+        if log.task.is_some()        { obj.insert(String::from("task_ct"),     json!(log.task_ct.unwrap()));       }
         if log.cmd.is_some()         { obj.insert(String::from("cmd"),         json!(log.cmd.clone().unwrap()));           }
-        if log.cmd_rc.is_some()      { obj.insert(String::from("cmd_rc"),      json!(log.cmd_rc.clone().unwrap()));        }
+        if log.cmd_rc.is_some()      { obj.insert(String::from("cmd_rc"),      json!(log.cmd_rc.unwrap()));        }
         if log.cmd_out.is_some()     { obj.insert(String::from("cmd_out"),     json!(log.cmd_out.clone().unwrap()));       }
         if log.task_status.is_some() { obj.insert(String::from("task_status"), json!(log.task_status.clone().unwrap()));   }
         if log.host.is_some()        { obj.insert(String::from("host"),        json!(log.host.clone().unwrap()));          }
@@ -160,7 +151,7 @@ impl PlaybookVisitor {
     }
 
     pub fn is_check_mode(&self) -> bool { 
-        return self.check_mode == CheckMode::Yes; 
+        self.check_mode == CheckMode::Yes
     }
 
     pub fn banner(&self) {
@@ -216,7 +207,7 @@ impl PlaybookVisitor {
 
     pub fn on_exit(&self, context: &Arc<RwLock<PlaybookContext>>) {
         println!("----------------------------------------------------------");
-        println!("");
+        println!();
         self.show_playbook_summary(context);
     }
 
@@ -257,9 +248,9 @@ impl PlaybookVisitor {
         println!("… {} => notified: {}", host2.name, which_handler);
     }
 
-    pub fn on_host_delegate(&self, host: &Arc<RwLock<Host>>, delegated: &String) {
+    pub fn on_host_delegate(&self, host: &Arc<RwLock<Host>>, delegated: &str) {
         let host2 = host.read().unwrap();
-        println!("{color_blue}✓ {} => delegating to: {}{color_reset}",  &host2.name, delegated.clone());
+        println!("{color_blue}✓ {} => delegating to: {}{color_reset}",  &host2.name, delegated);
     }
 
     pub fn on_host_task_ok(&self, context: &Arc<RwLock<PlaybookContext>>, task_response: &Arc<TaskResponse>, host: &Arc<RwLock<Host>>) {
@@ -386,7 +377,7 @@ impl PlaybookVisitor {
                     println!("    rc: {}{color_reset}", cmd_result.rc);
                     log_entry.cmd     = Some(cmd_result.cmd.clone());
                     log_entry.cmd_out = Some(cmd_result.out.clone());
-                    log_entry.cmd_rc  = Some(cmd_result.rc.clone());
+                    log_entry.cmd_rc  = Some(cmd_result.rc);
                 }
             } else {
                 println!("{color_red}! error: {}: {}{color_reset}", host2.name, msg.as_ref().unwrap());
@@ -412,23 +403,23 @@ impl PlaybookVisitor {
 
     pub fn get_exit_status(&self, context: &Arc<RwLock<PlaybookContext>>) -> i32 {
         let failed_hosts = context.read().unwrap().get_hosts_failed_count();
-        return match failed_hosts {
+        match failed_hosts {
             0 => 0,
             _ => 1
-        };
+        }
     }
     
-    pub fn on_before_transfer(&self, context: &Arc<RwLock<PlaybookContext>>, host: &Arc<RwLock<Host>>, path: &String) {
+    pub fn on_before_transfer(&self, context: &Arc<RwLock<PlaybookContext>>, host: &Arc<RwLock<Host>>, path: &str) {
         let host2 = host.read().unwrap();
         if context.read().unwrap().verbosity > 0 {
-            println!("{color_blue}! {} => transferring to: {}", host2.name, &path.clone());
+            println!("{color_blue}! {} => transferring to: {}", host2.name, &path);
         }
     }
 
-    pub fn on_command_run(&self, context: &Arc<RwLock<PlaybookContext>>, host: &Arc<RwLock<Host>>, cmd: &String) {
+    pub fn on_command_run(&self, context: &Arc<RwLock<PlaybookContext>>, host: &Arc<RwLock<Host>>, cmd: &str) {
         let host2 = host.read().unwrap();
         if context.read().unwrap().verbosity > 0 {
-            println!("{color_blue}! {} => exec: {}", host2.name, &cmd.clone());
+            println!("{color_blue}! {} => exec: {}", host2.name, &cmd);
         }
     }
 
@@ -487,10 +478,10 @@ impl PlaybookVisitor {
 
         let summary = match failed_hosts {
             0 => match adjusted_hosts {
-                0 => String::from(format!("{color_green}(✓) Perfect. All hosts matched policy.{color_reset}")),
-                _ => String::from(format!("{color_blue}(✓) Actions were applied.{color_reset}")),
+                0 => format!("{color_green}(✓) Perfect. All hosts matched policy.{color_reset}"),
+                _ => format!("{color_blue}(✓) Actions were applied.{color_reset}"),
             },
-            _ => String::from(format!("{color_red}(X) Failures have occured.{color_reset}")),
+            _ => format!("{color_red}(X) Failures have occured.{color_reset}"),
         };
 
         let mode_table = format!("|:-|:-|:-|\n\
@@ -513,8 +504,8 @@ impl PlaybookVisitor {
                           |-|-|-");
 
         crate::util::terminal::markdown_print(&mode_table);
-        println!("{}", format!("\n{summary}"));
-        println!("");
+        println!("\n{summary}");
+        println!();
 
         let mut log_entry = self.log_entry(&String::from("SUMMARY"), Arc::clone(context));
         let mut map : serde_json::map::Map<String,serde_json::Value> = serde_json::map::Map::new();

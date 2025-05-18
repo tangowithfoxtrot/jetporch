@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // long with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#[allow(clippy::empty_line_after_doc_comments)]
 /** ADD MODULES HERE, KEEP ALPHABETIZED **/
 
 pub mod assert;

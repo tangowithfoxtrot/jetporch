@@ -1,5 +1,5 @@
 
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::sync::Arc;
 use crate::inventory::hosts::Host;
 use crate::inventory::groups::Group;
@@ -24,17 +24,17 @@ impl Inventory {
         }
     }
 
-    pub fn has_group(&self, group_name: &String) -> bool {
-        return self.groups.contains_key(&group_name.clone());
+    pub fn has_group(&self, group_name: &str) -> bool {
+        self.groups.contains_key(group_name)
     }
 
     pub fn get_group(&self, group_name: &String) -> Arc<RwLock<Group>> {
         let arc = self.groups.get(group_name).unwrap();
-        return Arc::clone(&arc); 
+        Arc::clone(arc)
     }
 
     pub fn has_host(&self, host_name: &String) -> bool {
-        return self.hosts.contains_key(host_name);
+        self.hosts.contains_key(host_name)
     }
 
     pub fn get_host(&self, host_name: &String) -> Arc<RwLock<Host>> {
@@ -45,7 +45,7 @@ impl Inventory {
 
         if self.has_host(host_name) {
             let host = self.hosts.get(host_name).unwrap();
-            return Arc::clone(&host);
+            Arc::clone(host)
         }
         else if host_name.eq("localhost") {
             return Arc::clone(&self.backup_localhost);
@@ -69,13 +69,13 @@ impl Inventory {
         group.write().expect("group write").set_variables(mapping);
     }
 
-    pub fn store_group(&mut self, group: &String) {
-        self.create_group(&group.clone()); 
+    pub fn store_group(&mut self, group: &str) {
+        self.create_group(&group.to_owned()); 
     }
 
     pub fn associate_host(&mut self, group_name: &String, host_name: &String, host: Arc<RwLock<Host>>) {
-        if !self.has_host(&host_name) { panic!("host does not exist"); }
-        if !self.has_group(&group_name) { self.create_group(group_name); }
+        if !self.has_host(host_name) { panic!("host does not exist"); }
+        if !self.has_group(group_name) { self.create_group(group_name); }
         let group_obj = self.get_group(group_name);
         // FIXME: these add method should all take strings, not all are consistent yet?
         group_obj.write().unwrap().add_host(&host_name.clone(), host);
@@ -100,8 +100,8 @@ impl Inventory {
     }
 
     pub fn store_host(&mut self, group_name: &String, host_name: &String) {
-        if !(self.has_host(&host_name)) {
-            self.create_host(&host_name);
+        if !(self.has_host(host_name)) {
+            self.create_host(host_name);
         }
         let host = self.get_host(host_name);
         self.associate_host(group_name, host_name, Arc::clone(&host));
@@ -117,7 +117,7 @@ impl Inventory {
         }
         self.groups.insert(group_name.clone(), Arc::new(RwLock::new(Group::new(&group_name.clone()))));
         if !group_name.eq(&String::from("all")) {
-            self.associate_subgroup(&String::from("all"), &group_name);
+            self.associate_subgroup(&String::from("all"), group_name);
         }
     }
 
@@ -137,4 +137,10 @@ impl Inventory {
     }
 
 
+}
+
+impl Default for Inventory {
+    fn default() -> Self {
+        Self::new()
+    }
 }
