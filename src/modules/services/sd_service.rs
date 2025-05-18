@@ -17,7 +17,7 @@
 use crate::tasks::*;
 use crate::handle::handle::{TaskHandle,CheckRc};
 use crate::tasks::fields::Field;
-use serde::{Deserialize};
+use serde::Deserialize;
 use std::sync::Arc;
 use std::vec::Vec;
 
@@ -55,18 +55,18 @@ impl IsTask for SystemdServiceTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(SystemdServiceAction {
                     service:    handle.template.string_no_spaces(request, tm, &String::from("service"), &self.service)?,
-                    enabled:    handle.template.boolean_option_default_none(&request, tm, &String::from("enabled"), &self.enabled)?,
-                    started:    handle.template.boolean_option_default_none(&request, tm, &String::from("started"), &self.started)?,
-                    restart:    handle.template.boolean_option_default_false(&request, tm, &String::from("restart"), &self.restart)?
+                    enabled:    handle.template.boolean_option_default_none(request, tm, &String::from("enabled"), &self.enabled)?,
+                    started:    handle.template.boolean_option_default_none(request, tm, &String::from("started"), &self.started)?,
+                    restart:    handle.template.boolean_option_default_false(request, tm, &String::from("restart"), &self.restart)?
                 }),
-                with: Arc::new(PreLogicInput::template(&handle, &request, tm, &self.with)?),
-                and: Arc::new(PostLogicInput::template(&handle, &request, tm, &self.and)?)
+                with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
+                and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?)
             }
-        );
+        )
     }
 
 }
@@ -100,10 +100,10 @@ impl IsAction for SystemdServiceAction {
                 };
 
 
-                if changes.len() > 0 {
-                    return Ok(handle.response.needs_modification(request, &changes));
+                if !changes.is_empty() {
+                    Ok(handle.response.needs_modification(request, &changes))
                 } else {
-                    return Ok(handle.response.is_matched(request));
+                    Ok(handle.response.is_matched(request))
                 }
 
             },
@@ -117,10 +117,10 @@ impl IsAction for SystemdServiceAction {
                 if request.changes.contains(&Field::Enable)       { self.do_enable(handle, request)?;  }
                 else if request.changes.contains(&Field::Disable) { self.do_disable(handle, request)?; }
 
-                return Ok(handle.response.is_modified(request, request.changes.clone()));
+                Ok(handle.response.is_modified(request, request.changes.clone()))
             }
     
-            _ => { return Err(handle.response.not_supported(request)); }
+            _ => { Err(handle.response.not_supported(request))}
     
         }
     }
@@ -138,49 +138,50 @@ impl SystemdServiceAction {
         
         let result = handle.remote.run(request, &is_enabled_cmd, CheckRc::Unchecked)?;
         let (_rc,out) = cmd_info(&result);
-        if out.find("disabled").is_some() || out.find("deactivating").is_some() { is_enabled = false; }
-        else if out.find("enabled").is_some() || out.find("alias").is_some() { is_enabled = true; } 
+        if out.contains("disabled") || out.contains("deactivating") { is_enabled = false; }
+        else if out.contains("enabled") || out.contains("alias") { is_enabled = true; } 
         else {
             return Err(handle.response.is_failed(request, &format!("systemctl enablement status unexpected for service({}): ({})", self.service, out))); 
         }
 
         let result2 = handle.remote.run(request, &is_active_cmd, CheckRc::Unchecked)?;
         let (_rc2,out2) = cmd_info(&result2);
-        if out2.find("inactive").is_some() || out2.find("failed").is_some() { is_active = false; }
-        else if out2.find("active").is_some() { is_active = true; }
+        let inactive = "inactive";
+        if out2.contains(inactive) || out2.contains("failed") { is_active = false; }
+        else if out2.contains("active") { is_active = true; }
         else { 
             return Err(handle.response.is_failed(request, &format!("systemctl activity status unexpected for service({}): {}", self.service, out2))); 
         }
 
-        return Ok(ServiceDetails {
+        Ok(ServiceDetails {
             enabled: is_enabled,
             started: is_active,
-        });
+        })
     }
 
     pub fn do_start(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
         let cmd = format!("systemctl start '{}'", self.service);
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
     
     pub fn do_stop(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
         let cmd = format!("systemctl stop '{}'", self.service);
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
     
     pub fn do_enable(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
         let cmd = format!("systemctl enable '{}'", self.service);
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
     
     pub fn do_disable(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
         let cmd = format!("systemctl disable '{}'", self.service);
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
 
     pub fn do_restart(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
         let cmd = format!("systemctl restart '{}'", self.service);
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
 
 }

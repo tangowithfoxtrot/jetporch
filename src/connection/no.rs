@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // long with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::connection::connection::{Connection};
+use crate::connection::connection::Connection;
 use crate::connection::factory::ConnectionFactory;
 use crate::playbooks::context::PlaybookContext;
 use crate::inventory::hosts::{Host,HostOSType};
@@ -44,11 +44,11 @@ impl ConnectionFactory for NoFactory {
         // we just pretend everything is Linux for now
         host.write().unwrap().os_type = Some(HostOSType::Linux);
         let conn : Arc<Mutex<dyn Connection>> = Arc::new(Mutex::new(NoConnection::new()));
-        return Ok(conn);
+        Ok(conn)
     }
     fn get_local_connection(&self, _context: &Arc<RwLock<PlaybookContext>>) -> Result<Arc<Mutex<dyn Connection>>, String> {
         let conn : Arc<Mutex<dyn Connection>> = Arc::new(Mutex::new(NoConnection::new()));
-        return Ok(conn);
+        Ok(conn)
     }
 }
 
@@ -66,27 +66,27 @@ impl Connection for NoConnection {
 
    fn whoami(&self) -> Result<String,String> {
        // we don't really bother with saying what username is connected
-       return Ok(String::from("root"));
+       Ok(String::from("root"))
    }
 
    fn connect(&mut self) -> Result<(),String> {
        // all connections are imaginary so there's nothing to do
-       return Ok(());
+       Ok(())
    }
 
-   fn run_command(&self, response: &Arc<Response>, request: &Arc<TaskRequest>, cmd: &String, _forward: Forward) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
+   fn run_command(&self, response: &Arc<Response>, request: &Arc<TaskRequest>, cmd: &str, _forward: Forward) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
        // all commands return junk output pretending they were successful
-       return Ok(response.command_ok(request,&Arc::new(Some(CommandResult { cmd: cmd.clone(), out: String::from("__simulated__"), rc: 0 }))));
+       Ok(response.command_ok(request,&Arc::new(Some(CommandResult { cmd: cmd.to_owned(), out: String::from("__simulated__"), rc: 0 }))))
    }
 
-   fn write_data(&self, _response: &Arc<Response>, _request: &Arc<TaskRequest>, _data: &String, _remote_path: &String) -> Result<(),Arc<TaskResponse>>{
+   fn write_data(&self, _response: &Arc<Response>, _request: &Arc<TaskRequest>, _data: &str, _remote_path: &str) -> Result<(),Arc<TaskResponse>>{
        // no data is transferred, we just pretend things were successful
-       return Ok(());
+       Ok(())
    }
 
-   fn copy_file(&self, _response: &Arc<Response>, _request: &Arc<TaskRequest>, _src: &Path, _dest: &String) -> Result<(), Arc<TaskResponse>> {
+   fn copy_file(&self, _response: &Arc<Response>, _request: &Arc<TaskRequest>, _src: &Path, _dest: &str) -> Result<(), Arc<TaskResponse>> {
        // no data is transferred, as per above
-       return Ok(());
+       Ok(())
    }
 
 }

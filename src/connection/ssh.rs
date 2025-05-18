@@ -61,7 +61,7 @@ impl SshFactory {
 impl ConnectionFactory for SshFactory {
 
     fn get_local_connection(&self, context: &Arc<RwLock<PlaybookContext>>) -> Result<Arc<Mutex<dyn Connection>>, String> {
-        return Ok(self.local_factory.get_connection(context, &self.localhost)?);
+        self.local_factory.get_connection(context, &self.localhost)
     }
 
     fn get_connection(&self, context: &Arc<RwLock<PlaybookContext>>, host:&Arc<RwLock<Host>>) -> Result<Arc<Mutex<dyn Connection>>, String> {
@@ -95,12 +95,12 @@ impl ConnectionFactory for SshFactory {
         }
 
         // actually connect here
-        let mut conn = SshConnection::new(Arc::clone(&host), &user, port, hostname2, self.forward_agent, self.login_password.clone(), key, passphrase, key_comment);
-        return match conn.connect() {
+        let mut conn = SshConnection::new(Arc::clone(host), &user, port, hostname2, self.forward_agent, self.login_password.clone(), key, passphrase, key_comment);
+        match conn.connect() {
             Ok(_)  => { 
                 let conn2 : Arc<Mutex<dyn Connection>> = Arc::new(Mutex::new(conn));
                 ctx.connection_cache.write().expect("connection cache write").add_connection(
-                    &Arc::clone(&host), &Arc::clone(&conn2));
+                    &Arc::clone(host), &Arc::clone(&conn2));
                 Ok(conn2)
             },
             Err(x) => { Err(x) } 
@@ -122,8 +122,8 @@ pub struct SshConnection {
 }
 
 impl SshConnection {
-    pub fn new(host: Arc<RwLock<Host>>, username: &String, port: i64, hostname: String, forward_agent: bool, login_password: Option<String>, key: Option<String>, passphrase: Option<String>, key_comment: Option<String>) -> Self {
-        Self { host: Arc::clone(&host), username: username.clone(), port, hostname, session: None, forward_agent, login_password, key, passphrase, key_comment }
+    pub fn new(host: Arc<RwLock<Host>>, username: &str, port: i64, hostname: String, forward_agent: bool, login_password: Option<String>, key: Option<String>, passphrase: Option<String>, key_comment: Option<String>) -> Self {
+        Self { host: Arc::clone(&host), username: username.to_owned(), port, hostname, session: None, forward_agent, login_password, key, passphrase, key_comment }
     }
 }
 
@@ -132,7 +132,7 @@ impl Connection for SshConnection {
     fn whoami(&self) -> Result<String,String> {
         // if asked who we are logged in as, it is the user we have connected with
         // sudoers info is on top of that, and this logic is expressed in remote.rs
-        return Ok(self.username.clone());
+        Ok(self.username.clone())
     }
 
     fn connect(&mut self) -> Result<(), String> {
@@ -168,14 +168,14 @@ impl Connection for SshConnection {
         // Connect to the local SSH server - need to get socketaddrs first in order to use Duration for timeout
         let seconds = Duration::from_secs(10);
         assert!(!self.host.read().expect("host read").name.eq("localhost"));
-        let connect_str = format!("{host}:{port}", host=self.hostname, port=self.port.to_string());
+        let connect_str = format!("{host}:{port}", host=self.hostname, port=self.port);
         // connect with timeout requires SocketAddr objects instead of just connection strings
         let addrs_iter = connect_str.as_str().to_socket_addrs();
         
         // check for errors
         let mut addrs_iter2 = match addrs_iter { Err(_x) => { return Err(String::from("unable to resolve")); }, Ok(y) => y };
         let addr = addrs_iter2.next();
-        if ! addr.is_some() { return Err(String::from("unable to resolve(2)"));  }
+        if addr.is_none() { return Err(String::from("unable to resolve(2)"));  }
         
         // actually connect (finally) here
         let tcp = match TcpStream::connect_timeout(&addr.unwrap(), seconds) { Ok(x) => x, _ => { 
@@ -230,21 +230,18 @@ impl Connection for SshConnection {
                 };
                 let mut found : bool = false;
                 for ident in agent.identities().unwrap() {
-                    match ident.comment() == self.key_comment.clone().unwrap() {
-                        true => {
-                            match agent.userauth(&self.username, &ident) {
-                                Ok(_) => {
-                                    // use this identity
-                                    found = true;
-                                    break;
-                                },
-                                Err(x) => { 
-                                    return Err(format!("SSH Key authentication failed for user {} with key {}: {}", 
-                                        self.username, self.key_comment.clone().unwrap(), x)); 
-                                }
-                            };
-                        }
-                        false => (),
+                    if ident.comment() == self.key_comment.clone().unwrap() {
+                        match agent.userauth(&self.username, &ident) {
+                            Ok(_) => {
+                                // use this identity
+                                found = true;
+                                break;
+                            },
+                            Err(x) => { 
+                                return Err(format!("SSH Key authentication failed for user {} with key {}: {}", 
+                                    self.username, self.key_comment.clone().unwrap(), x)); 
+                            }
+                        };
                     }
                 }
                 if !found {
@@ -274,7 +271,7 @@ impl Connection for SshConnection {
                 {
                     match self.host.write().unwrap().set_os_info(&out.clone()) {
                         Ok(_x) => {},
-                        Err(_y) => return Err(format!("failed to set OS info"))
+                        Err(_y) => return Err("failed to set OS info".to_string())
                     }
                 }
                 //match result2 { Ok(_) => {}, Err(s) => { return Err(s.to_string()) } }
@@ -283,10 +280,10 @@ impl Connection for SshConnection {
         }
 
 
-        return Ok(());
+        Ok(())
     }
 
-    fn run_command(&self, response: &Arc<Response>, request: &Arc<TaskRequest>, cmd: &String, forward: Forward) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
+    fn run_command(&self, response: &Arc<Response>, request: &Arc<TaskRequest>, cmd: &str, forward: Forward) -> Result<Arc<TaskResponse>,Arc<TaskResponse>> {
         let result = match forward {   
             Forward::Yes => match self.forward_agent {
                 false => self.run_command_low_level(cmd),
@@ -298,15 +295,15 @@ impl Connection for SshConnection {
         match result {
             Ok((rc,s)) => {
                 // note that non-zero return codes are "ok" to the connection plugin, handle elsewhere!
-                return Ok(response.command_ok(request, &Arc::new(Some(CommandResult { cmd: cmd.clone(), out: s.clone(), rc: rc }))));
+                Ok(response.command_ok(request, &Arc::new(Some(CommandResult { cmd: cmd.to_owned(), out: s.clone(), rc }))))
             }, 
             Err((rc,s)) => {
-                return Err(response.command_failed(request, &Arc::new(Some(CommandResult { cmd: cmd.clone(), out: s.clone(), rc: rc }))));
+                Err(response.command_failed(request, &Arc::new(Some(CommandResult { cmd: cmd.to_owned(), out: s.clone(), rc }))))
             }
         }
     }
 
-    fn write_data(&self, response: &Arc<Response>, request: &Arc<TaskRequest>, data: &String, remote_path: &String) -> Result<(),Arc<TaskResponse>> {
+    fn write_data(&self, response: &Arc<Response>, request: &Arc<TaskRequest>, data: &str, remote_path: &str) -> Result<(),Arc<TaskResponse>> {
 
         // SFTP writing does not allow root to overwrite files root does not own, and does not support sudo. 
         // as such this is a pretty low level write (as is copy_file) and logic around tempfiles and permissions is handled in remote.rs
@@ -331,10 +328,10 @@ impl Connection for SshConnection {
             Err(y) => { return Err(response.is_failed(request, &format!("sftp write failed: {y}"))); }
         }
 
-        return Ok(());
+        Ok(())
     }
 
-    fn copy_file(&self, response: &Arc<Response>, request: &Arc<TaskRequest>, src: &Path, remote_path: &String) -> Result<(), Arc<TaskResponse>> {
+    fn copy_file(&self, response: &Arc<Response>, request: &Arc<TaskRequest>, src: &Path, remote_path: &str) -> Result<(), Arc<TaskResponse>> {
 
         // this is a streaming copy that should be fine with large files.
 
@@ -365,7 +362,7 @@ impl Connection for SshConnection {
             Err(y) => { return Err(response.is_failed(request, &format!("sftp copy failed (1): {y}"))) }
         };
 
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -380,7 +377,7 @@ impl SshConnection {
         }
     }
 
-    fn run_command_low_level(&self, cmd: &String) -> Result<(i32,String),(i32,String)> {
+    fn run_command_low_level(&self, cmd: &str) -> Result<(i32,String),(i32,String)> {
         // FIXME: catch the rare possibility this unwrap fails and return a nice error?
         let session = self.session.as_ref().unwrap();
         let mut channel = match session.channel_session() {
@@ -395,10 +392,10 @@ impl SshConnection {
         let _w = channel.wait_close();
         let exit_status = match channel.exit_status() { Ok(x) => x, Err(y) => { return Err((500,y.to_string())) } };
         self.trim_newlines(&mut s);
-        return Ok((exit_status, s.clone()));
+        Ok((exit_status, s.clone()))
     }
 
-    fn run_command_with_ssh_a(&self, cmd: &String) -> Result<(i32,String),(i32,String)> {
+    fn run_command_with_ssh_a(&self, cmd: &str) -> Result<(i32,String),(i32,String)> {
         // this is annoying but libssh2 agent support is not really working, so if we need to SSH -A we need to invoke
         // SSHd directly, which we need to for example with git clones. we will likely use this again
         // for fanout support.
@@ -414,17 +411,17 @@ impl SshConnection {
                     Some(rc) => {
                         let mut out = convert_out(&x.stdout,&x.stderr);
                         self.trim_newlines(&mut out);
-                        return Ok((rc, out.clone()))
+                        Ok((rc, out.clone()))
                     },
                     None => {
-                        return Ok((418, String::from("")))
+                        Ok((418, String::from("")))
                     }
                 }
             },
             Err(_x) => {
-                return Err((404, String::from("")))
+                Err((404, String::from("")))
             }
-        };
+        }
     }
 
 }

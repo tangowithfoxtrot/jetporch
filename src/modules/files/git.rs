@@ -17,7 +17,7 @@
 use crate::tasks::*;
 use crate::handle::handle::TaskHandle;
 use crate::tasks::fields::Field;
-use serde::{Deserialize};
+use serde::Deserialize;
 use std::sync::Arc;
 use std::vec::Vec;
 use crate::tasks::files::Recurse;
@@ -57,33 +57,30 @@ impl IsTask for GitTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(GitAction {
-                    repo:         handle.template.string(&request, tm, &String::from("repo"), &self.repo)?,
-                    path:         handle.template.path(&request, tm, &String::from("path"), &self.path)?,
-                    branch:       handle.template.string_option_default(&request, tm, &String::from("branch"), &self.branch, &String::from("main"))?,
-                    accept_keys:  handle.template.boolean_option_default_true(&request, tm, &String::from("accept_keys"), &self.accept_keys)?,
-                    update:       handle.template.boolean_option_default_true(&request, tm, &String::from("update"), &self.update)?,
-                    attributes:   FileAttributesInput::template(&handle, &request, tm, &self.attributes)?,
+                    repo:         handle.template.string(request, tm, &String::from("repo"), &self.repo)?,
+                    path:         handle.template.path(request, tm, &String::from("path"), &self.path)?,
+                    branch:       handle.template.string_option_default(request, tm, &String::from("branch"), &self.branch, &String::from("main"))?,
+                    accept_keys:  handle.template.boolean_option_default_true(request, tm, &String::from("accept_keys"), &self.accept_keys)?,
+                    update:       handle.template.boolean_option_default_true(request, tm, &String::from("update"), &self.update)?,
+                    attributes:   FileAttributesInput::template(handle, request, tm, &self.attributes)?,
                     ssh_options:  {
                         let mut options : Vec<String> = Vec::new();
-                        match &self.ssh_options {
-                            Some(input_options) => {
-                                for (k,v) in input_options.iter() {
-                                    options.push(format!("-o {}={}", k, v))
-                                }
-                            },
-                            _ => {}
+                        if let Some(input_options) = &self.ssh_options {
+                            for (k,v) in input_options.iter() {
+                                options.push(format!("-o {}={}", k, v))
+                            }
                         };
                         options.push(String::from("-o BatchMode=Yes"));
                         options
                     }
                 }),
-                with: Arc::new(PreLogicInput::template(&handle, &request, tm, &self.with)?),
-                and: Arc::new(PostLogicInput::template(&handle, &request, tm, &self.and)?),
+                with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
+                and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?),
             }
-        );
+        )
     }
 
 }
@@ -138,7 +135,7 @@ impl IsAction for GitAction {
                                     }
                                 }
 
-                                if changes.len() > 0 {
+                                if !changes.is_empty() {
                                     Ok(handle.response.needs_modification(request, &changes))
                                 } else {
                                     Ok(handle.response.is_matched(request))
@@ -155,7 +152,7 @@ impl IsAction for GitAction {
                 handle.remote.process_all_common_file_attributes(request, &self.path, &self.attributes, Recurse::Yes)?;
                 self.clone(handle, request)?;
                 self.switch_branch(handle, request)?;                           
-                return Ok(handle.response.is_created(request));
+                Ok(handle.response.is_created(request))
             },
 
             TaskRequestType::Modify => {
@@ -167,11 +164,11 @@ impl IsAction for GitAction {
                 if request.changes.contains(&Field::Branch) {
                     self.switch_branch(handle, request)?;
                 }
-                return Ok(handle.response.is_modified(request, request.changes.clone()));
+                Ok(handle.response.is_modified(request, request.changes.clone()))
             },
 
             // no passive or execute leg
-            _ => { return Err(handle.response.not_supported(request)); }
+            _ => { Err(handle.response.not_supported(request))}
 
         
         }
@@ -183,22 +180,21 @@ impl GitAction {
     // BOOKMARK: fleshing this all out... 
 
     fn is_ssh_repo(&self) -> bool {
-        let result = self.repo.find("@").is_some() || self.repo.find("ssh://").is_some();
-        return result;
+        self.repo.contains("@") || self.repo.contains("ssh://")
     }
 
     fn get_ssh_options_string(&self) -> String {
         let options = self.ssh_options.join(" ");
         if self.path.starts_with("http") {
             // http or https:// passwords are intentionally not supported, use a key instead, see docs
-            return String::from("GIT_TERMINAL_PROMPT=0");
+            String::from("GIT_TERMINAL_PROMPT=0")
         }
         else {
             let accept_keys = match self.accept_keys {
                 true  => String::from(" -o StrictHostKeyChecking=accept-new"),
                 false => String::from("")
             };
-            return format!("GIT_SSH_COMMAND=\"ssh {}{}\" GIT_TERMINAL_PROMPT=0", options, accept_keys);
+            format!("GIT_SSH_COMMAND=\"ssh {}{}\" GIT_TERMINAL_PROMPT=0", options, accept_keys)
         }
     }
 
@@ -207,9 +203,9 @@ impl GitAction {
         let result = handle.remote.run_unsafe(request, &cmd, CheckRc::Unchecked)?;
         let (rc, out) = cmd_info(&result);
         if rc == 0 {
-            return Ok(Some(out.replace("\n","")));
+            Ok(Some(out.replace("\n","")))
         } else {
-            return Ok(None);
+            Ok(None)
         }
     }
 
@@ -218,10 +214,10 @@ impl GitAction {
         let cmd = format!("{} git ls-remote {} | head -n 1 | cut -f 1", ssh_options, self.repo);
         let result = match self.is_ssh_repo() {
             true  => handle.remote.run_forwardable(request, &cmd, CheckRc::Checked)?,
-            false => handle.remote.run_unsafe(&request, &cmd, CheckRc::Checked)?
+            false => handle.remote.run_unsafe(request, &cmd, CheckRc::Checked)?
         };
         let (_rc, out) = cmd_info(&result);
-        return Ok(out);
+        Ok(out)
     }
     
 
@@ -230,16 +226,16 @@ impl GitAction {
         let cmd = format!("{} git -C {} pull", ssh_options, self.path);
         match self.is_ssh_repo() {
             true  => handle.remote.run_forwardable(request, &cmd, CheckRc::Checked)?,
-            false => handle.remote.run_unsafe(&request, &cmd, CheckRc::Checked)?
+            false => handle.remote.run_unsafe(request, &cmd, CheckRc::Checked)?
         };
-        return Ok(());
+        Ok(())
     }
 
     fn get_local_branch(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<String, Arc<TaskResponse>> {
         let cmd = format!("git -C {} rev-parse --abbrev-ref HEAD", self.path);
         let result = handle.remote.run_unsafe(request, &cmd, CheckRc::Checked)?;
         let (_rc, out) = cmd_info(&result);
-        return Ok(out);
+        Ok(out)
     }
 
     fn clone(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<(),Arc<TaskResponse>> {
@@ -248,15 +244,15 @@ impl GitAction {
         let cmd = format!("{} git clone {} {}", ssh_options, self.repo, self.path);
         match self.is_ssh_repo() {
             true =>  handle.remote.run_forwardable(request, &cmd, CheckRc::Checked)?,
-            false => handle.remote.run_unsafe(&request, &cmd, CheckRc::Checked)?
+            false => handle.remote.run_unsafe(request, &cmd, CheckRc::Checked)?
         };
-        return Ok(());
+        Ok(())
     }
 
     fn switch_branch(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<(), Arc<TaskResponse>> {
         let cmd = format!("git -C {} switch {}", self.path, self.branch);
         handle.remote.run_unsafe(request, &cmd, CheckRc::Checked)?;
-        return Ok(());
+        Ok(())
     }
 
 }

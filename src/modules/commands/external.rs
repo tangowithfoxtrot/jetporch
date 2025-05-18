@@ -16,7 +16,7 @@
 
 use crate::tasks::*;
 use crate::handle::handle::TaskHandle;
-use serde::{Deserialize};
+use serde::Deserialize;
 use std::sync::{Arc,RwLock};
 use serde_json;
 use std::path::PathBuf;
@@ -53,7 +53,7 @@ impl IsTask for ExternalTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(ExternalAction {
                     use_module: handle.template.find_module_path(request, tm, &String::from("use"), &self.use_module)?,
@@ -73,14 +73,14 @@ impl IsTask for ExternalTask {
                             }
                         }
                     },
-                    save: handle.template.string_option_no_spaces(&request, tm, &String::from("save"), &self.save)?,
-                    failed_when: handle.template.string_option_unsafe_for_shell(&request, tm, &String::from("failed_when"), &self.failed_when)?,
-                    changed_when: handle.template.string_option_unsafe_for_shell(&request, tm, &String::from("changed_when"), &self.changed_when)?,
+                    save: handle.template.string_option_no_spaces(request, tm, &String::from("save"), &self.save)?,
+                    failed_when: handle.template.string_option_unsafe_for_shell(request, tm, &String::from("failed_when"), &self.failed_when)?,
+                    changed_when: handle.template.string_option_unsafe_for_shell(request, tm, &String::from("changed_when"), &self.changed_when)?,
                 }),
-                with: Arc::new(PreLogicInput::template(&handle, &request, tm, &self.with)?),
-                and: Arc::new(PostLogicInput::template(&handle, &request, tm, &self.and)?),
+                with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
+                and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?),
             }
-        );
+        )
     }
 
 }
@@ -92,7 +92,7 @@ impl IsAction for ExternalAction {
         match request.request_type {
 
             TaskRequestType::Query => {
-                return Ok(handle.response.needs_execution(&request));
+                Ok(handle.response.needs_execution(request))
             },
 
             TaskRequestType::Execute => {
@@ -106,12 +106,12 @@ impl IsAction for ExternalAction {
                 let param_str_path = param_tmp_file.as_path().display().to_string();
 
                 handle.remote.copy_file(request, self.use_module.as_path(), &module_str_path.clone(), |_f| { 
-                    return Ok(()) 
+                    Ok(()) 
                 })?;
                 
                 handle.remote.write_data(request, &self.params.clone(), &param_str_path.clone(), |_f| {
                     // not using the after save handler for this module
-                    return Ok(());
+                    Ok(())
                 })?;
                 
                 let chmod = format!("chmod +x '{}'", module_str_path.clone());
@@ -127,7 +127,7 @@ impl IsAction for ExternalAction {
                 let map_data = build_results_map(handle, request, rc, &out)?;
 
                 let should_fail = match self.failed_when.is_none() {
-                    true => match rc { 0 => false, _ => true },
+                    true => !matches!(rc, 0),
                     false => {
                         let condition = self.failed_when.as_ref().unwrap();
                         handle.template.test_condition_with_extra_data(request, TemplateMode::Strict, condition, &handle.host, map_data.clone())?
@@ -146,17 +146,17 @@ impl IsAction for ExternalAction {
                     save_results(&handle.host, self.save.as_ref().unwrap(), map_data);
                 }
 
-                return match should_fail {
+                match should_fail {
                     true => Err(handle.response.command_failed(request, &Arc::clone(&task_result.command_result))),
                     false => match should_mark_changed {
                         true => Ok(task_result),
                         false => Ok(handle.response.is_passive(request))
                     }
-                };
+                }
                 
             },
     
-            _ => { return Err(handle.response.not_supported(&request)); }
+            _ => { Err(handle.response.not_supported(request))}
     
         }
     }
@@ -180,12 +180,12 @@ fn build_results_map(handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, rc: i
             return Err(handle.response.is_failed(request, &format!("response should be a map: {}", out)));
         }
     }
-    return Ok(result);
+    Ok(result)
 }
 
-fn save_results(host: &Arc<RwLock<Host>>, key: &String, map_data: serde_yaml::Mapping) {
+fn save_results(host: &Arc<RwLock<Host>>, key: &str, map_data: serde_yaml::Mapping) {
     let mut result = serde_yaml::Mapping::new();
-    result.insert(serde_yaml::Value::String(key.clone()), serde_yaml::Value::Mapping(map_data.clone()));
+    result.insert(serde_yaml::Value::String(key.to_owned()), serde_yaml::Value::Mapping(map_data.clone()));
     host.write().unwrap().update_variables(result);
 }
 

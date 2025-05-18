@@ -43,7 +43,7 @@ impl IsTask for FailTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(FailAction {
                     name: self.name.clone().unwrap_or(String::from(MODULE)),
@@ -52,7 +52,7 @@ impl IsTask for FailTask {
                 with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
                 and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?),
             }
-        );
+        )
     }
 }
 
@@ -63,7 +63,7 @@ impl IsAction for FailAction {
         match request.request_type {
 
             TaskRequestType::Query => {
-                return Ok(handle.response.needs_passive(request));
+                Ok(handle.response.needs_passive(request))
             },
 
             TaskRequestType::Passive => {
@@ -71,10 +71,10 @@ impl IsAction for FailAction {
                     true => self.msg.as_ref().unwrap().clone(),
                     false => String::from("fail invoked")
                 };
-                return Err(handle.response.is_failed(request, &msg));
+                Err(handle.response.is_failed(request, &msg))
             },
 
-            _ => { return Err(handle.response.not_supported(request)); }
+            _ => { Err(handle.response.not_supported(request))}
 
         }
 

@@ -34,23 +34,23 @@ enum ConnectionMode {
 }
 
 pub fn playbook_ssh(inventory: &Arc<RwLock<Inventory>>, parser: &CliParser) -> i32 {
-    return playbook(inventory, parser, CheckMode::No, ConnectionMode::Ssh);
+    playbook(inventory, parser, CheckMode::No, ConnectionMode::Ssh)
 }
 
 pub fn playbook_check_ssh(inventory: &Arc<RwLock<Inventory>>, parser: &CliParser) -> i32 {
-    return playbook(inventory, parser, CheckMode::Yes, ConnectionMode::Ssh);
+    playbook(inventory, parser, CheckMode::Yes, ConnectionMode::Ssh)
 }
 
 pub fn playbook_local(inventory: &Arc<RwLock<Inventory>>, parser: &CliParser) -> i32 {
-    return playbook(inventory, parser, CheckMode::No, ConnectionMode::Local);
+    playbook(inventory, parser, CheckMode::No, ConnectionMode::Local)
 }
 
 pub fn playbook_check_local(inventory: &Arc<RwLock<Inventory>>, parser: &CliParser) -> i32 {
-    return playbook(inventory, parser, CheckMode::Yes, ConnectionMode::Local);
+    playbook(inventory, parser, CheckMode::Yes, ConnectionMode::Local)
 }
 
 pub fn playbook_simulate(inventory: &Arc<RwLock<Inventory>>, parser: &CliParser) -> i32 {
-    return playbook(inventory, parser, CheckMode::No, ConnectionMode::Simulate);
+    playbook(inventory, parser, CheckMode::No, ConnectionMode::Simulate)
 }
 
 fn playbook(inventory: &Arc<RwLock<Inventory>>, parser: &CliParser, check_mode: CheckMode, connection_mode: ConnectionMode) -> i32 {
@@ -62,7 +62,7 @@ fn playbook(inventory: &Arc<RwLock<Inventory>>, parser: &CliParser, check_mode: 
         module_paths: Arc::clone(&parser.module_paths),
         limit_hosts: parser.limit_hosts.clone(),
         limit_groups: parser.limit_groups.clone(),
-        batch_size: parser.batch_size.clone(),
+        batch_size: parser.batch_size,
         // the context is constructed with an instance of the parser instead of having a back-reference
         // to run-state.  Context should mostly *not* get parameters from the parser unless they
         // are going to appear in variables.
@@ -76,9 +76,9 @@ fn playbook(inventory: &Arc<RwLock<Inventory>>, parser: &CliParser, check_mode: 
         tags: parser.tags.clone(),
         allow_localhost_delegation: parser.allow_localhost_delegation
     });
-    return match playbook_traversal(&run_state) {
+    match playbook_traversal(&run_state) {
         Ok(_)  => run_state.visitor.read().unwrap().get_exit_status(&run_state.context),
         Err(s) => { println!("{}", s); 1 }
-    };
+    }
 }
 

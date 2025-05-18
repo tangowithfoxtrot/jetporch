@@ -51,41 +51,41 @@ pub fn fsm_run_task(run_state: &Arc<RunState>, play: &Play, task: &Task, are_han
     let _total : i64 = host_objects.par_iter().map(|host| {
 
         // get the connection to each host, which should be left open until the play ends
-        let connection_result = run_state.connection_factory.read().unwrap().get_connection(&run_state.context, &host);
+        let connection_result = run_state.connection_factory.read().unwrap().get_connection(&run_state.context, host);
         match connection_result {
             Ok(_)  => {
                 let connection = connection_result.unwrap();
-                run_state.visitor.read().unwrap().on_host_task_start(&run_state.context, &host);
+                run_state.visitor.read().unwrap().on_host_task_start(&run_state.context, host);
                 // the actual task is invoked here
-                let task_response = run_task_on_host(&run_state,connection,&host,play,task,are_handlers);
+                let task_response = run_task_on_host(run_state,connection,host,play,task,are_handlers);
 
                 match task_response {
                     Ok(x) => {
                         match check {
                             // output slightly differs in check vs non-check modes
-                            false => run_state.visitor.read().unwrap().on_host_task_ok(&run_state.context, &x, &host),
-                            true => run_state.visitor.read().unwrap().on_host_task_check_ok(&run_state.context, &x, &host)
+                            false => run_state.visitor.read().unwrap().on_host_task_ok(&run_state.context, &x, host),
+                            true => run_state.visitor.read().unwrap().on_host_task_check_ok(&run_state.context, &x, host)
                         }
                     }
                     Err(x) => {
                         // hosts with task failures are removed from the pool
-                        run_state.context.write().unwrap().fail_host(&host);
-                        run_state.visitor.read().unwrap().on_host_task_failed(&run_state.context, &x, &host);
+                        run_state.context.write().unwrap().fail_host(host);
+                        run_state.visitor.read().unwrap().on_host_task_failed(&run_state.context, &x, host);
                     },
                 }
             },
             Err(x) => {
                 // hosts with connection failures are removed from the pool
-                run_state.visitor.read().unwrap().debug_host(&host, &x);
-                run_state.context.write().unwrap().fail_host(&host);
-                run_state.visitor.read().unwrap().on_host_connect_failed(&run_state.context, &host);
+                run_state.visitor.read().unwrap().debug_host(host, &x);
+                run_state.context.write().unwrap().fail_host(host);
+                run_state.visitor.read().unwrap().on_host_connect_failed(&run_state.context, host);
             }
         }
         // rayon needs some math to add up, hence the 1. It seems to short-circuit without some work to do.
-        return 1;
+        1
 
     }).sum();
-    return Ok(());
+    Ok(())
 }
 
 fn get_actual_connection(run_state: &Arc<RunState>, host: &Arc<RwLock<Host>>, task: &Task, input_connection: Arc<Mutex<dyn Connection>>) -> Result<(Option<String>,Arc<Mutex<dyn Connection>>), String> {
@@ -93,7 +93,7 @@ fn get_actual_connection(run_state: &Arc<RunState>, host: &Arc<RwLock<Host>>, ta
     // usually the connection we already have is the one we will use, but this is not the case for using the delegate_to feature
     // this is a bit complex...
 
-    return match task.get_with() {
+    match task.get_with() {
         
         // if the task has a with section then the task might be delegated
         Some(task_with) => match task_with.delegate_to {
@@ -113,14 +113,14 @@ fn get_actual_connection(run_state: &Arc<RunState>, host: &Arc<RwLock<Host>>, ta
                 if delegate.eq(&hn.clone()) {
                     // delegating to the same host will deadlock since the connection is wrapped in a mutex, 
                     // so just return the original connection if that is requested
-                    return Ok((None, input_connection))
+                    Ok((None, input_connection))
                 }
                 else if delegate.eq(&String::from("localhost")) {
                     // localhost delegation has some security implications (see docs) so require a CLI flag for access
                     if run_state.allow_localhost_delegation {
                         return Ok((Some(delegate.clone()), run_state.connection_factory.read().unwrap().get_local_connection(&run_state.context)?))
                     } else {
-                        return Err(format!("localhost delegation has potential security implementations, pass --allow-localhost-delegation to sign off"));
+                        return Err("localhost delegation has potential security implementations, pass --allow-localhost-delegation to sign off".to_string());
                     }
                 }
                 else {
@@ -138,7 +138,7 @@ fn get_actual_connection(run_state: &Arc<RunState>, host: &Arc<RwLock<Host>>, ta
         },
         // there was no 'with' block, use teh original connection
         None => Ok((None, input_connection))
-    };
+    }
 }
 
 fn run_task_on_host(
@@ -177,8 +177,8 @@ fn run_task_on_host(
     };
 
     // if we are delegating, tell the user
-    if delegated.is_some() {
-        run_state.visitor.read().unwrap().on_host_delegate(host, &delegated.unwrap());
+    if let Some(delegated1) = delegated {
+        run_state.visitor.read().unwrap().on_host_delegate(host, &delegated1);
     }
 
     // process the YAML inputs of the task and turn them into something we can  use
@@ -189,7 +189,7 @@ fn run_task_on_host(
     if evaluated.with.is_some() {
         let condition = &evaluated.with.as_ref().as_ref().unwrap().condition; // lol rust
         if condition.is_some() {
-            let cond = handle.template.test_condition(&validate, TemplateMode::Strict, &condition.as_ref().unwrap())?;
+            let cond = handle.template.test_condition(&validate, TemplateMode::Strict, condition.as_ref().unwrap())?;
             if ! cond {
                 return Ok(handle.response.is_skipped(&Arc::clone(&validate)));
             }
@@ -210,7 +210,7 @@ fn run_task_on_host(
     let mut last : Option<Result<Arc<TaskResponse>,Arc<TaskResponse>>> = None;
 
     // even if we are not iterating over a list of items, make a list of one item to simplify the logic
-    let evaluated_items = template_items(&handle, &validate, TemplateMode::Strict, &items_input)?;
+    let evaluated_items = template_items(&handle, &validate, TemplateMode::Strict, items_input)?;
 
     // walking over each item or just the single task if 'with_items' was not used
     for item in evaluated_items.iter() {
@@ -235,13 +235,13 @@ fn run_task_on_host(
             
             // here we finally call the actual task, everything around this is just support
             // for delegation, loops, and retries!
-            match run_task_on_host_inner(run_state, &connection, host, play, task, are_handlers, &handle, &validate, &evaluated) {
+            match run_task_on_host_inner(run_state, connection, host, play, task, are_handlers, &handle, &validate, &evaluated) {
                 Err(e) => match retries {
                     // retries are used up
                     0 => { return Err(e); },
                     // we have retries left
                     _ => { 
-                        retries = retries - 1;
+                        retries -= 1;
                         run_state.visitor.read().unwrap().on_host_task_retry(&run_state.context, host, retries, delay);
                         if delay > 0 {
                             let duration = time::Duration::from_secs(delay);
@@ -257,16 +257,20 @@ fn run_task_on_host(
 
     // looping over a list of no items should be impossible unless someone passed in a variable that was
     // an empty list
-    if last.is_some() {
-        return last.unwrap();
+    let res = {
+        let this = &last;
+        (*this).is_some()
+    }; if res {
+        last.unwrap()
     }
     else {
-        return Err(handle.response.is_failed(&validate, &String::from("with/items contained no entries")));    
+        Err(handle.response.is_failed(&validate, &String::from("with/items contained no entries")))
     }
 
 }
 
 // the "on this host" method body from _task
+#[allow(clippy::too_many_arguments)] // FIXME: too many args
 fn run_task_on_host_inner(
     run_state: &Arc<RunState>,
     _connection: &Arc<Mutex<dyn Connection>>,
@@ -305,7 +309,7 @@ fn run_task_on_host_inner(
         if are_handlers == HandlerMode::Handlers  {
             // if we are running handlers at the moment, skip any un-notified handlers
             if ! my_host.is_notified(play_count, &logic.subscribe.as_ref().unwrap().clone()) {
-                return Ok(handle.response.is_skipped(&Arc::clone(&validate))); 
+                return Ok(handle.response.is_skipped(&Arc::clone(validate))); 
             }
         }
         
@@ -329,19 +333,16 @@ fn run_task_on_host_inner(
 
     // invoke the resource and see what actions it thinks need to be performed
 
-    let qrc = action.dispatch(&handle, &query);
+    let qrc = action.dispatch(handle, &query);
 
     // in check mode we short-circuit evaluation early, except for passive modules
     // like 'facts'
 
     if run_state.visitor.read().unwrap().is_check_mode() {
-        match qrc {
-            Ok(ref qrc_ok) => match qrc_ok.status {
-                TaskStatus::NeedsPassive => { /* allow modules like !facts or set to execute */ },
-                _ => { return qrc; }
-            },
-            _ => {}
-        }
+        if let Ok(ref qrc_ok) = qrc { match qrc_ok.status {
+            TaskStatus::NeedsPassive => { /* allow modules like !facts or set to execute */ },
+            _ => { return qrc; }
+        } }
     }
 
     // with the query completed, what action to perform next depends on the query results
@@ -357,7 +358,7 @@ fn run_task_on_host_inner(
             TaskStatus::NeedsCreation => match modify_mode {
                 true => {
                     let req = TaskRequest::create(&sudo_details);
-                    let crc = action.dispatch(&handle, &req);
+                    let crc = action.dispatch(handle, &req);
                     match crc {
                         Ok(ref crc_ok) => match crc_ok.status {
                             TaskStatus::IsCreated => crc,
@@ -376,7 +377,7 @@ fn run_task_on_host_inner(
             TaskStatus::NeedsRemoval => match modify_mode {
                 true => {
                     let req = TaskRequest::remove(&sudo_details);
-                    let rrc = action.dispatch(&handle, &req);
+                    let rrc = action.dispatch(handle, &req);
                     match rrc {
                         Ok(ref rrc_ok) => match rrc_ok.status {
                             TaskStatus::IsRemoved => rrc,
@@ -394,7 +395,7 @@ fn run_task_on_host_inner(
             TaskStatus::NeedsModification => match modify_mode {
                 true => {
                     let req = TaskRequest::modify(&sudo_details, qrc_ok.changes.clone());
-                    let mrc = action.dispatch(&handle, &req);
+                    let mrc = action.dispatch(handle, &req);
                     match mrc {
                         Ok(ref mrc_ok) => match mrc_ok.status {
                             TaskStatus::IsModified => mrc,
@@ -412,7 +413,7 @@ fn run_task_on_host_inner(
             TaskStatus::NeedsExecution => match modify_mode {
                 true => {
                     let req = TaskRequest::execute(&sudo_details);
-                    let erc = action.dispatch(&handle, &req);
+                    let erc = action.dispatch(handle, &req);
                     match erc {
                         Ok(ref erc_ok) => match erc_ok.status {
                             TaskStatus::IsExecuted => erc,
@@ -430,7 +431,7 @@ fn run_task_on_host_inner(
 
             TaskStatus::NeedsPassive => {
                 let req = TaskRequest::passive(&sudo_details);
-                let prc = action.dispatch(&handle, &req);
+                let prc = action.dispatch(handle, &req);
                 match prc {
                     Ok(ref prc_ok) => match prc_ok.status {
                         TaskStatus::IsPassive => prc,
@@ -495,5 +496,5 @@ fn run_task_on_host_inner(
 
     // ok, we're done, whew
 
-    return result;
+    result
 }

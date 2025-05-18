@@ -18,7 +18,7 @@ use crate::tasks::*;
 use crate::handle::handle::TaskHandle;
 use crate::tasks::fields::Field;
 use crate::tasks::files::Recurse;
-use serde::{Deserialize};
+use serde::Deserialize;
 use std::sync::Arc;
 use std::vec::Vec;
 
@@ -49,22 +49,22 @@ impl IsTask for DirectoryTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        let recurse = match handle.template.boolean_option_default_false(&request, tm, &String::from("recurse"), &self.recurse)? {
+        let recurse = match handle.template.boolean_option_default_false(request, tm, &String::from("recurse"), &self.recurse)? {
             true => Recurse::Yes,
             false => Recurse::No
         };
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(DirectoryAction {
-                    remove:     handle.template.boolean_option_default_false(&request, tm, &String::from("remove"), &self.remove)?,
-                    recurse:    recurse, 
-                    path:       handle.template.path(&request, tm, &String::from("path"), &self.path)?,
-                    attributes: FileAttributesInput::template(&handle, &request, tm, &self.attributes)?
+                    remove:     handle.template.boolean_option_default_false(request, tm, &String::from("remove"), &self.remove)?,
+                    recurse, 
+                    path:       handle.template.path(request, tm, &String::from("path"), &self.path)?,
+                    attributes: FileAttributesInput::template(handle, request, tm, &self.attributes)?
                 }),
-                with: Arc::new(PreLogicInput::template(&handle, &request, tm, &self.with)?),
-                and: Arc::new(PostLogicInput::template(&handle, &request, tm, &self.and)?),
+                with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
+                and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?),
             }
-        );
+        )
     }
 
 }
@@ -79,11 +79,11 @@ impl IsAction for DirectoryAction {
                 let mut changes : Vec<Field> = Vec::new();
                 let remote_mode = handle.remote.query_common_file_attributes(request, &self.path, &self.attributes, &mut changes, self.recurse)?;                 
                 if remote_mode.is_none() {
-                    if self.remove             { return Ok(handle.response.is_matched(request)); } 
-                    else                       { return Ok(handle.response.needs_creation(request));  }
+                    if self.remove             { Ok(handle.response.is_matched(request))} 
+                    else                       { Ok(handle.response.needs_creation(request))}
                 } else {
                     let is_file = handle.remote.get_is_file(request, &self.path)?;
-                    if is_file                 { return Err(handle.response.is_failed(request, &format!("{} is not a directory", self.path))); }
+                    if is_file                 { Err(handle.response.is_failed(request, &format!("{} is not a directory", self.path)))}
                     else if self.remove        { return Ok(handle.response.needs_removal(request)); }
                     else if changes.is_empty() { return Ok(handle.response.is_matched(request)); }
                     else                       { return Ok(handle.response.needs_modification(request, &changes)); }
@@ -93,21 +93,21 @@ impl IsAction for DirectoryAction {
             TaskRequestType::Create => {
                 handle.remote.create_directory(request, &self.path)?;               
                 handle.remote.process_all_common_file_attributes(request, &self.path, &self.attributes, self.recurse)?;
-                return Ok(handle.response.is_created(request));
+                Ok(handle.response.is_created(request))
             },
 
             TaskRequestType::Modify => {
                 handle.remote.process_common_file_attributes(request, &self.path, &self.attributes, &request.changes, self.recurse)?;
-                return Ok(handle.response.is_modified(request, request.changes.clone()));
+                Ok(handle.response.is_modified(request, request.changes.clone()))
             },
 
             TaskRequestType::Remove => {
                 handle.remote.delete_directory(request, &self.path, self.recurse)?;               
-                return Ok(handle.response.is_removed(request))
+                Ok(handle.response.is_removed(request))
             }
 
             // no passive or execute leg
-            _ => { return Err(handle.response.not_supported(request)); }
+            _ => { Err(handle.response.not_supported(request))}
 
         
         }

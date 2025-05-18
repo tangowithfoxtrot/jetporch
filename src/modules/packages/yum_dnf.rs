@@ -18,7 +18,7 @@ use crate::tasks::*;
 use crate::modules::packages::common::{PackageManagementModule,PackageDetails};
 use crate::handle::handle::{TaskHandle,CheckRc};
 use crate::inventory::hosts::PackagePreference;
-use serde::{Deserialize};
+use serde::Deserialize;
 use std::sync::Arc;
 
 const MODULE: &str = "yum_dnf";
@@ -49,18 +49,18 @@ impl IsTask for YumDnfTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(YumDnfAction {
                     package:    handle.template.string_no_spaces(request, tm, &String::from("package"), &self.package)?,
-                    version:    handle.template.string_option_no_spaces(&request, tm, &String::from("version"), &self.version)?,
-                    update:     handle.template.boolean_option_default_false(&request, tm, &String::from("update"), &self.update)?,
-                    remove:     handle.template.boolean_option_default_false(&request, tm, &String::from("remove"), &self.remove)?
+                    version:    handle.template.string_option_no_spaces(request, tm, &String::from("version"), &self.version)?,
+                    update:     handle.template.boolean_option_default_false(request, tm, &String::from("update"), &self.update)?,
+                    remove:     handle.template.boolean_option_default_false(request, tm, &String::from("remove"), &self.remove)?
                 }),
-                with: Arc::new(PreLogicInput::template(&handle, &request, tm, &self.with)?),
-                and: Arc::new(PostLogicInput::template(&handle, &request, tm, &self.and)?),
+                with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
+                and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?),
             }
-        );
+        )
     }
 
 }
@@ -68,7 +68,7 @@ impl IsTask for YumDnfTask {
 impl IsAction for YumDnfAction {
 
     fn dispatch(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>, Arc<TaskResponse>> {
-        return self.common_dispatch(handle,request);
+        self.common_dispatch(handle,request)
     }
 
 }
@@ -76,20 +76,20 @@ impl IsAction for YumDnfAction {
 impl PackageManagementModule for YumDnfAction {
 
     fn is_update(&self) -> bool {
-        return self.update;
+        self.update
     }
 
     fn is_remove(&self) -> bool {
-        return self.remove; 
+        self.remove
     }
 
     fn get_version(&self) -> Option<String> {
-        return self.version.clone();
+        self.version.clone()
     }
 
     fn initial_setup(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<(),Arc<TaskResponse>> {
         self.set_package_preference(handle,request)?;
-        return Ok(());
+        Ok(())
     }
 
     fn get_local_version(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
@@ -101,7 +101,7 @@ impl PackageManagementModule for YumDnfAction {
         let result = handle.remote.run(request, &cmd, CheckRc::Unchecked)?;
         let (_rc,out) = cmd_info(&result);
         let details = self.parse_local_package_details(&out.clone())?;
-        return Ok(details);
+        Ok(details)
     }
 
     fn get_remote_version(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
@@ -109,7 +109,7 @@ impl PackageManagementModule for YumDnfAction {
         let result = handle.remote.run_unsafe(request, &cmd, CheckRc::Unchecked)?;
         let (_rc,out) = cmd_info(&result);
         let details = self.parse_remote_package_details(&out.clone())?;
-        return Ok(details);
+        Ok(details)
     }
     
     fn install_package(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>>{
@@ -118,19 +118,19 @@ impl PackageManagementModule for YumDnfAction {
             true => format!("{} install '{}' -y", which, self.package),
             false => format!("{} install '{}-{}' -y", which, self.package, self.version.as_ref().unwrap())
         };
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
 
     fn update_package(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>>{
         let which = self.get_package_manager(handle);
         let cmd = format!("{} update '{}' -y", which, self.package);
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
 
     fn remove_package(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>) -> Result<Arc<TaskResponse>,Arc<TaskResponse>>{
         let which = self.get_package_manager(handle);
         let cmd = format!("{} remove '{}' -y", which, self.package);
-        return handle.remote.run(request, &cmd, CheckRc::Checked);
+        handle.remote.run(request, &cmd, CheckRc::Checked)
     }
 
 }
@@ -167,7 +167,7 @@ impl YumDnfAction {
         }
     }
 
-    fn parse_local_package_details(&self, out: &String) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
+    fn parse_local_package_details(&self, out: &str) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
         let mut name: Option<String> = None;
         let mut version: Option<String> = None;
         for line in out.lines() {
@@ -184,24 +184,23 @@ impl YumDnfAction {
                 if key2.eq("Version") { version = Some(value2.to_string()); break; }
             }
         }
-        if name.is_some() && version.is_some() {
-            return Ok(Some(PackageDetails { name: name.unwrap().clone(), version: version.unwrap().clone() }));
-        } else {
-            return Ok(None);
+        match name.is_some() && version.is_some() {
+            true => Ok(Some(PackageDetails { name: name.unwrap().clone(), version: version.unwrap().clone() })),
+            false => Ok(None),
         }
     }
     
-    fn parse_remote_package_details(&self, out: &String) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
+    fn parse_remote_package_details(&self, out: &str) -> Result<Option<PackageDetails>,Arc<TaskResponse>> {
         // FYI: this command doesn't have useful return codes
         for line in out.lines() {
             if ! line.contains("metadata expiration") {
                 return Ok(Some(PackageDetails {
-                    name: self.package.clone(),
+                    name: self.package.to_owned(),
                     version: line.trim().to_string(),
                 }));
             }
         }
-        return Ok(None);
+        Ok(None)
     }
 
 }

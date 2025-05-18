@@ -24,17 +24,17 @@ mod modules;
 mod tasks;
 mod handle;
 
-use crate::util::io::{quit};
+use crate::util::io::quit;
 use crate::inventory::inventory::Inventory;
-use crate::inventory::loading::{load_inventory};
+use crate::inventory::loading::load_inventory;
 use crate::cli::show::{show_inventory_group,show_inventory_host};
-use crate::cli::parser::{CliParser};
+use crate::cli::parser::CliParser;
 use crate::cli::playbooks::{playbook_ssh,playbook_local,playbook_check_ssh,playbook_check_local,playbook_simulate}; // FIXME: check modes coming
 use std::sync::{Arc,RwLock};
 use std::process;
 
 fn main() {
-    match liftoff() { Err(e) => quit(&e), _ => {} }
+    if let Err(e) = liftoff() { quit(&e) }
 }
 
 fn liftoff() -> Result<(),String> {
@@ -60,7 +60,7 @@ fn liftoff() -> Result<(),String> {
             if ! cli_parser.inventory_set {
                 return Err(String::from("--inventory is required"));
             }
-            if inventory.read().expect("inventory read").hosts.len() == 0 {
+            if inventory.read().expect("inventory read").hosts.is_empty() {
                 return Err(String::from("no hosts found in --inventory"));
             }
         },
@@ -101,7 +101,7 @@ fn liftoff() -> Result<(),String> {
     if exit_status != 0 {
         process::exit(exit_status);
     }
-    return Ok(());
+    Ok(())
 }
 
 pub fn handle_show(inventory: &Arc<RwLock<Inventory>>, parser: &CliParser) -> Result<(), String> {
@@ -117,6 +117,6 @@ pub fn handle_show(inventory: &Arc<RwLock<Inventory>>, parser: &CliParser) -> Re
     for host_name in parser.show_hosts.iter() {
         show_inventory_host(inventory, &host_name.clone())?;
     }
-    return Ok(());
+    Ok(())
 }
 

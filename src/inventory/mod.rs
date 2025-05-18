@@ -17,4 +17,5 @@
 pub mod groups;
 pub mod hosts;
 pub mod loading;
+#[allow(clippy::module_inception)] // FIXME
 pub mod inventory;

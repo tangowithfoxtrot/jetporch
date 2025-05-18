@@ -14,37 +14,37 @@
 // You should have received a copy of the GNU General Public License
 // long with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-pub fn markdown_print(markdown: &String) {
+pub fn markdown_print(markdown: &str) {
     termimad::print_text(markdown);
 }
 
 pub fn banner(msg: &String) {
-    let markdown = String::from(format!("|:-|\n\
+    let markdown = format!("|:-|\n\
                                         |{}|\n\
-                                        |-", msg));
+                                        |-", msg);
     markdown_print(&markdown);
 }
 
-pub fn two_column_table(header_a: &String, header_b: &String, elements: &Vec<(String,String)>) {
+pub fn two_column_table(header_a: &String, header_b: &String, elements: &[(String,String)]) {
     let mut buffer = String::from("|:-|:-\n");
     buffer.push_str(
-        &String::from(format!("|{}|{}\n", header_a, header_b))
+        &format!("|{}|{}\n", header_a, header_b)
     );
     for (a,b) in elements.iter() {
         buffer.push_str(&String::from("|-|-\n"));
         buffer.push_str(
-            &String::from(format!("|{}|{}\n", a, b))
+            &format!("|{}|{}\n", a, b)
         );
     }
     buffer.push_str(&String::from("|-|-\n"));
     markdown_print(&buffer);
 }
 
-pub fn captioned_display(caption: &String, body: &String) {
+pub fn captioned_display(caption: &String, body: &str) {
     banner(caption);
-    println!("");
+    println!();
     for line in body.lines() {
         println!("    {}", line);
     }
-    println!("");
+    println!();
 }

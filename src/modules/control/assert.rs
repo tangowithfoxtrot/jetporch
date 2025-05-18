@@ -54,17 +54,17 @@ impl IsTask for AssertTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(AssertAction {
                     name: self.name.clone().unwrap_or(String::from(MODULE)),
                     msg: handle.template.string_option_unsafe_for_shell(request, tm, &String::from("msg"), &self.msg)?,
                     r#true: match self.r#true.is_some() {
-                            true => handle.template.test_condition(request, tm, &self.r#true.as_ref().unwrap())?,
+                            true => handle.template.test_condition(request, tm, self.r#true.as_ref().unwrap())?,
                             false => true
                     },
                     r#false: match self.r#false.is_some() {
-                            true => handle.template.test_condition(request, tm, &self.r#false.as_ref().unwrap())?,
+                            true => handle.template.test_condition(request, tm, self.r#false.as_ref().unwrap())?,
                             false => false
                     },
                     all_true: match self.all_true.is_some() {
@@ -83,16 +83,16 @@ impl IsTask for AssertTask {
                 with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
                 and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?),
             }
-        );
+        )
     }
 }
 
-fn eval_list(handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode, list: &Vec<String>) -> Result<Vec<bool>,Arc<TaskResponse>> {
+fn eval_list(handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode, list: &[String]) -> Result<Vec<bool>,Arc<TaskResponse>> {
     let mut results : Vec<bool> = Vec::new();
     for item in list.iter() {
         results.push(handle.template.test_condition(request, tm, item)?);
     }
-    return Ok(results);
+    Ok(results)
 }
 
 impl IsAction for AssertAction {
@@ -102,15 +102,17 @@ impl IsAction for AssertAction {
         match request.request_type {
 
             TaskRequestType::Query => {
-                return Ok(handle.response.needs_passive(request));
+                Ok(handle.response.needs_passive(request))
             },
 
             TaskRequestType::Passive => {
                 let mut fail = false;
-                if self.r#true == false {
+
+                #[allow(clippy::if_same_then_else)] // FIXME
+                if !self.r#true {
                     fail = true;
                 }
-                else if self.r#false == true {
+                else if self.r#false {
                     fail = true; 
                 }
                 else if self.all_true.contains(&false) {
@@ -122,17 +124,18 @@ impl IsAction for AssertAction {
                 else if ! self.some_true.contains(&true) {
                     fail = true;
                 }
+
                 if fail {
                     if self.msg.is_some() {
                         return Err(handle.response.is_failed(request, &format!("assertion failed: {}", self.msg.as_ref().unwrap())));
                     } else {
-                        return Err(handle.response.is_failed(request, &format!("assertion failed")));
+                        return Err(handle.response.is_failed(request, "assertion failed"));
                     }
                 }
-                return Ok(handle.response.is_passive(request));
+                Ok(handle.response.is_passive(request))
             },
 
-            _ => { return Err(handle.response.not_supported(request)); }
+            _ => { Err(handle.response.not_supported(request))}
 
         }
 

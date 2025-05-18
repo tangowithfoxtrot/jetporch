@@ -48,7 +48,9 @@ pub struct TaskResponse {
     pub changes: Vec<Field>,
     pub msg: Option<String>,
     pub command_result: Arc<Option<CommandResult>>,
+    #[allow(dead_code)] // FIXME: remove if truly not needed
     pub with: Arc<Option<PreLogicEvaluated>>,
+    #[allow(dead_code)] // FIXME: remove if truly not needed
     pub and: Arc<Option<PostLogicEvaluated>>
 }
 

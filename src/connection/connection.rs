@@ -30,12 +30,12 @@ pub trait Connection : Send + Sync {
 
     // FIXME: add error return objects
     
-    fn write_data(&self, response: &Arc<Response>, request: &Arc<TaskRequest>, data: &String, remote_path: &String) -> Result<(),Arc<TaskResponse>>;
+    fn write_data(&self, response: &Arc<Response>, request: &Arc<TaskRequest>, data: &str, remote_path: &str) -> Result<(),Arc<TaskResponse>>;
 
-    fn copy_file(&self, response: &Arc<Response>, request: &Arc<TaskRequest>, src: &Path, dest: &String) -> Result<(), Arc<TaskResponse>>;
+    fn copy_file(&self, response: &Arc<Response>, request: &Arc<TaskRequest>, src: &Path, dest: &str) -> Result<(), Arc<TaskResponse>>;
 
     fn whoami(&self) -> Result<String,String>;
 
-    fn run_command(&self, response: &Arc<Response>, request: &Arc<TaskRequest>, cmd: &String, forward: Forward) -> Result<Arc<TaskResponse>,Arc<TaskResponse>>;
+    fn run_command(&self, response: &Arc<Response>, request: &Arc<TaskRequest>, cmd: &str, forward: Forward) -> Result<Arc<TaskResponse>,Arc<TaskResponse>>;
 
 }

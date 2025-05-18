@@ -18,8 +18,8 @@ use crate::inventory::hosts::HostOSType;
 use crate::tasks::*;
 use crate::handle::handle::TaskHandle;
 use crate::tasks::fields::Field;
-use serde::{Deserialize};
-use std::collections::{HashSet};
+use serde::Deserialize;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::vec::Vec;
 
@@ -61,7 +61,7 @@ impl IsTask for GroupTask {
     fn get_with(&self) -> Option<PreLogicInput> { self.with.clone() }
 
     fn evaluate(&self, handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode) -> Result<EvaluatedTask, Arc<TaskResponse>> {
-        return Ok(
+        Ok(
             EvaluatedTask {
                 action: Arc::new(GroupAction {
                     group:          handle.template.string_no_spaces(request, tm, &String::from("group"), &self.group)?,
@@ -78,14 +78,14 @@ impl IsTask for GroupTask {
                             None => {None}
                         }
                     },
-                    append:         handle.template.boolean_option_default_false(&request, tm, &String::from("append"), &self.append)?,
-                    system:         handle.template.boolean_option_default_false(&request, tm, &String::from("system"), &self.system)?,
-                    remove:         handle.template.boolean_option_default_false(&request, tm, &String::from("remove"), &self.remove)?,
+                    append:         handle.template.boolean_option_default_false(request, tm, &String::from("append"), &self.append)?,
+                    system:         handle.template.boolean_option_default_false(request, tm, &String::from("system"), &self.system)?,
+                    remove:         handle.template.boolean_option_default_false(request, tm, &String::from("remove"), &self.remove)?,
                 }),
-                with: Arc::new(PreLogicInput::template(&handle, &request, tm, &self.with)?),
-                and: Arc::new(PostLogicInput::template(&handle, &request, tm, &self.and)?),
+                with: Arc::new(PreLogicInput::template(handle, request, tm, &self.with)?),
+                and: Arc::new(PostLogicInput::template(handle, request, tm, &self.and)?),
             }
-        );
+        )
     }
 
 }
@@ -103,9 +103,9 @@ impl IsAction for GroupAction {
                 }
                 let actual: GroupDetails = self.get_group_details(handle, request)?;
                 match (actual.exists, self.remove) {
-                    (false, true)  => return Ok(handle.response.is_matched(request)),
-                    (false, false) => return Ok(handle.response.needs_creation(request)),
-                    (true, true)   => return Ok(handle.response.needs_removal(request)),
+                    (false, true)  => Ok(handle.response.is_matched(request)),
+                    (false, false) => Ok(handle.response.needs_creation(request)),
+                    (true, true)   => Ok(handle.response.needs_removal(request)),
                     (true, false)  => {
 
                         let mut changes : Vec<Field> = Vec::new();
@@ -113,8 +113,8 @@ impl IsAction for GroupAction {
                         if self.users_wants_change(&actual) { changes.push(Field::Users); }
 
                         match changes.len() {
-                            0 => return Ok(handle.response.is_matched(request)),
-                            _ => return Ok(handle.response.needs_modification(request, &changes)),
+                            0 => Ok(handle.response.is_matched(request)),
+                            _ => Ok(handle.response.needs_modification(request, &changes)),
                         }
                     }
                 }
@@ -127,7 +127,7 @@ impl IsAction for GroupAction {
                     let cmd = self.create_group_users_command().unwrap();
                     handle.remote.run(request, &cmd, CheckRc::Checked)?;
                 }
-                return Ok(handle.response.is_created(request));
+                Ok(handle.response.is_created(request))
             },
 
             TaskRequestType::Modify => {
@@ -140,17 +140,17 @@ impl IsAction for GroupAction {
                     let cmd = self.modify_group_users_command(&actual, &request.changes).unwrap();
                     handle.remote.run(request, &cmd, CheckRc::Checked)?;
                 }
-                return Ok(handle.response.is_modified(request, request.changes.clone()));
+                Ok(handle.response.is_modified(request, request.changes.clone()))
             },
 
             TaskRequestType::Remove => {
                 let cmd = self.delete_group_command();
                 handle.remote.run(request, &cmd, CheckRc::Checked)?;
-                return Ok(handle.response.is_removed(request))
+                Ok(handle.response.is_removed(request))
             }
 
             // no passive or execute leg
-            _ => { return Err(handle.response.not_supported(request)); }
+            _ => { Err(handle.response.not_supported(request))}
 
         }
     }
@@ -166,7 +166,7 @@ impl GroupAction {
         match rc {
             // return early if group does not exist (rc = 2)
             2 => {
-                return Ok(GroupDetails {
+                Ok(GroupDetails {
                     exists:   false,
                     gid:      None,
                     users:    None,
@@ -174,7 +174,6 @@ impl GroupAction {
             }
             0 => {
                 let items: Vec<&str> = out.split(":").collect();
-                let users: HashSet<String>;
                 // getent group from pkg shadow on alpine leaves the third colon off
                 // if no users are asigned to the group. F.e:
                 // A group with users assigned on any linux including alpine
@@ -185,19 +184,19 @@ impl GroupAction {
                 //     users:x:100
                 // Thus the length of  a Vec after split is always 4 on any linux exept alpine
                 // where it is 3 if no users assigned. So we need to handle that here:
-                if items.len() == 4 {
+                let users: HashSet<String> = if items.len() == 4 {
                     let str_vec: Vec<&str> = items[3].split(",").collect();
-                    users = str_vec.iter().map(|&s| s.to_string()).collect();
+                    str_vec.iter().map(|&s| s.to_string()).collect()
                 } else {
-                    users = HashSet::new();
-                }
-                return Ok(GroupDetails {
+                    HashSet::new()
+                };
+                Ok(GroupDetails {
                     exists: true,
                     gid:    Some(items[2].parse().unwrap()),
                     users: Some(users),
                 })
             }
-            x => { return Err(handle.response.is_failed(request, &format!("failure getting group details, rc: '{}'", x))); }
+            x => { Err(handle.response.is_failed(request, &format!("failure getting group details, rc: '{}'", x)))}
         }
     }
 
@@ -206,7 +205,7 @@ impl GroupAction {
         // group:pwd:GID:users
         // F.e.: users:x:100:alice,bob
         // Of course: the pwd field does just contain an 'x' in modern Unix/Linux because of /etc/shadow
-        return format!("getent group '{}'", self.group);
+        format!("getent group '{}'", self.group)
     }
 
     fn create_group_command(&self) -> String {
@@ -215,22 +214,22 @@ impl GroupAction {
             cmd.push_str(&format!(" -g '{}'", self.gid.as_ref().unwrap()));
         }
         if self.system && self.gid.is_none() {
-             cmd.push_str(&format!(" -r"));
+             cmd.push_str(" -r");
         }
         cmd.push_str(&format!(" '{}'", self.group));
-        return cmd;
+        cmd
     }
 
     fn create_group_users_command(&self) -> Option<String> {
         if self.users.is_some() {
             let final_users: Vec<String> = self.users.as_ref().unwrap().iter().cloned().collect();
-            return Some(format!("gpasswd -M '{}' '{}'", final_users.join(","), self.group));
+            Some(format!("gpasswd -M '{}' '{}'", final_users.join(","), self.group))
         } else {
-            return None;
+            None
         }
     }
 
-    fn modify_group_command(&self, _actual: &GroupDetails, changes: &Vec<Field>) -> Option<String> {
+    fn modify_group_command(&self, _actual: &GroupDetails, changes: &[Field]) -> Option<String> {
         if changes.contains(&Field::Gid) {
             let mut cmd = String::from("groupmod");
             if self.gid.is_some() && changes.contains(&Field::Gid) {
@@ -239,10 +238,10 @@ impl GroupAction {
             cmd.push_str(&format!(" '{}'", self.group));
             return Some(cmd);
         }
-        return None;
+        None
     }
 
-    fn modify_group_users_command(&self, actual: &GroupDetails, changes: &Vec<Field>) -> Option<String> {
+    fn modify_group_users_command(&self, actual: &GroupDetails, changes: &[Field]) -> Option<String> {
         if self.users.is_some() && changes.contains(&Field::Users) {
             match self.append {
                 true => {
@@ -270,11 +269,11 @@ impl GroupAction {
                 }
             }
         }
-        return None;
+        None
     }
 
     fn delete_group_command(&self) -> String {
-        return format!("groupdel '{}'", self.group)
+        format!("groupdel '{}'", self.group)
     }
 
     fn u64_wants_change(our: &Option<u64>, actual: &Option<u64>) -> bool {
@@ -286,7 +285,7 @@ impl GroupAction {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     fn users_wants_change(&self, actual: &GroupDetails) -> bool {
@@ -301,9 +300,9 @@ impl GroupAction {
         let actual_users  = actual.users.as_ref().unwrap();
         let desired_users = self.users.clone().unwrap();
         if self.append {
-            return ! desired_users.is_subset(&actual_users);
+            ! desired_users.is_subset(actual_users)
         } else {
-            return desired_users != *actual_users
+            desired_users != *actual_users
         }
     }
 

@@ -16,7 +16,7 @@
 
 use crate::util::io::{path_as_string,directory_as_string};
 use crate::playbooks::language::{Play,Role,RoleInvocation};
-use std::path::PathBuf;
+use std::path::Path;
 use std::collections::HashMap;
 use crate::inventory::hosts::Host;
 use std::sync::{Arc,RwLock};
@@ -125,7 +125,7 @@ impl PlaybookContext {
             extra_vars:               parser.extra_vars.clone(),
         };
         s.load_environment();
-        return s;
+        s
     }
 
     // the remaining hosts in a play are those that have not failed yet
@@ -134,17 +134,17 @@ impl PlaybookContext {
     pub fn get_remaining_hosts(&self) -> HashMap<String, Arc<RwLock<Host>>> {
         let mut results : HashMap<String, Arc<RwLock<Host>>> = HashMap::new();
         for (k,v) in self.targetted_hosts.iter() {
-            results.insert(k.clone(), Arc::clone(&v));
+            results.insert(k.clone(), Arc::clone(v));
         }
-        return results;
+        results
     }
 
     // SSH details are set in traversal and may come from the playbook or
     // or CLI options. These values are not guaranteed to be used as magic
     // variables could still exist in inventory for particular hosts
 
-    pub fn set_ssh_user(&mut self, ssh_user: &String) {
-        self.ssh_user = ssh_user.clone();
+    pub fn set_ssh_user(&mut self, ssh_user: &str) {
+        self.ssh_user = ssh_user.to_owned();
     }
 
     pub fn set_ssh_port(&mut self, ssh_port: i64) {
@@ -154,15 +154,15 @@ impl PlaybookContext {
     // used in traversal to tell the context what the current set of possible
     // hosts is.
 
-    pub fn set_targetted_hosts(&mut self, hosts: &Vec<Arc<RwLock<Host>>>) {
+    pub fn set_targetted_hosts(&mut self, hosts: &[Arc<RwLock<Host>>]) {
         self.targetted_hosts.clear();
         for host in hosts.iter() {
             let hostname = host.read().unwrap().name.clone();
             match self.failed_hosts.contains_key(&hostname) {
                 true => {},
                 false => { 
-                    self.seen_hosts.insert(hostname.clone(), Arc::clone(&host));
-                    self.targetted_hosts.insert(hostname.clone(), Arc::clone(&host)); 
+                    self.seen_hosts.insert(hostname.clone(), Arc::clone(host));
+                    self.targetted_hosts.insert(hostname.clone(), Arc::clone(host)); 
                 }
             }
         }
@@ -175,16 +175,16 @@ impl PlaybookContext {
     pub fn fail_host(&mut self, host: &Arc<RwLock<Host>>) {
         let host2 = host.read().unwrap();
         let hostname = host2.name.clone();
-        self.failed_tasks = self.failed_tasks + 1;
+        self.failed_tasks += 1;
 
         
         self.targetted_hosts.remove(&hostname);
-        self.failed_hosts.insert(hostname.clone(), Arc::clone(&host));
+        self.failed_hosts.insert(hostname.clone(), Arc::clone(host));
     }
 
-    pub fn set_playbook_path(&mut self, path: &PathBuf) {
-        self.playbook_path = Some(path_as_string(&path));
-        self.playbook_directory = Some(directory_as_string(&path));
+    pub fn set_playbook_path(&mut self, path: &Path) {
+        self.playbook_path = Some(path_as_string(path));
+        self.playbook_directory = Some(directory_as_string(path));
     }
 
     pub fn set_task(&mut self, task: &Task) {
@@ -193,19 +193,19 @@ impl PlaybookContext {
 
     pub fn set_play(&mut self, play: &Play) {
         self.play = Some(play.name.clone());
-        self.play_count = self.play_count + 1;
+        self.play_count += 1;
     }
 
     pub fn get_play_name(&self) -> String {
-        return match &self.play {
+        match &self.play {
             Some(x) => x.clone(),
             None => panic!("attempting to read a play name before plays have been evaluated")
         }
     }
 
-    pub fn set_role(&mut self, role: &Role, invocation: &RoleInvocation, role_path: &String) {
+    pub fn set_role(&mut self, role: &Role, invocation: &RoleInvocation, role_path: &str) {
         self.role = Some(role.clone());
-        self.role_path = Some(role_path.clone());
+        self.role_path = Some(role_path.to_owned());
         if role.defaults.is_some() { 
              *self.role_defaults_storage.write().unwrap() = role.defaults.as_ref().unwrap().clone();
         }
@@ -226,10 +226,10 @@ impl PlaybookContext {
 
     pub fn get_complete_blended_variables(&self, host: &Arc<RwLock<Host>>, blend_target: BlendTarget) -> serde_yaml::Mapping  {
         let blended = self.get_complete_blended_variables_as_value(host, blend_target);
-        return match blended {
+        match blended {
             serde_yaml::Value::Mapping(x) => x,
             _ => panic!("unexpected, get_blended_variables produced a non-mapping (3)")
-        };
+        }
     }
 
     pub fn get_complete_blended_variables_as_value(&self, host: &Arc<RwLock<Host>>, blend_target: BlendTarget) -> serde_yaml::Value  {
@@ -266,14 +266,14 @@ impl PlaybookContext {
                 blend_variables(&mut blended, serde_yaml::Value::Mapping(src4a.clone()));
             }
         };
-        return blended;
+        blended
     }
 
     // template code is not used here directly, but in handle/template.rs, which passes back through here, since
     // only the context knows all the variables from the playbook traversal to fill in and how to blend
     // variables in the correct order.
 
-    pub fn render_template(&self, template: &String, host: &Arc<RwLock<Host>>, blend_target: BlendTarget, template_mode: TemplateMode) -> Result<String,String> {
+    pub fn render_template(&self, template: &str, host: &Arc<RwLock<Host>>, blend_target: BlendTarget, template_mode: TemplateMode) -> Result<String,String> {
         let vars = self.get_complete_blended_variables(host, blend_target);
         return self.templar.read().unwrap().render(template, vars, template_mode);
     }
@@ -290,10 +290,10 @@ impl PlaybookContext {
     pub fn test_condition_with_extra_data(&self, expr: &String, host: &Arc<RwLock<Host>>, vars_input: serde_yaml::Mapping, tm: TemplateMode) -> Result<bool,String> {
         let mut vars = self.get_complete_blended_variables_as_value(host, BlendTarget::NotTemplateModule);
         blend_variables(&mut vars, serde_yaml::Value::Mapping(vars_input));
-        return match vars {
+        match vars {
             serde_yaml::Value::Mapping(x) => self.templar.read().unwrap().test_condition(expr, x, tm),
             _ => { panic!("impossible input to test_condition"); }
-        };
+        }
     }
 
     // when a host needs to connect over SSH it asks this function - we can use some settings configured
@@ -306,29 +306,29 @@ impl PlaybookContext {
         let vars = self.get_complete_blended_variables(host,BlendTarget::NotTemplateModule);
         let host2 = host.read().unwrap();
 
-        let remote_hostname = match vars.contains_key(&String::from("jet_ssh_hostname")) {
-            true => match vars.get(&String::from("jet_ssh_hostname")).unwrap().as_str() {
+        let remote_hostname = match vars.contains_key(String::from("jet_ssh_hostname")) {
+            true => match vars.get(String::from("jet_ssh_hostname")).unwrap().as_str() {
                 Some(x) => String::from(x),
                 None => host2.name.clone()
             },
             false => host2.name.clone()
         };
-        let remote_user = match vars.contains_key(&String::from("jet_ssh_user")) {
-            true => match vars.get(&String::from("jet_ssh_user")).unwrap().as_str() {
+        let remote_user = match vars.contains_key(String::from("jet_ssh_user")) {
+            true => match vars.get(String::from("jet_ssh_user")).unwrap().as_str() {
                 Some(x) => String::from(x),
                 None => self.ssh_user.clone()
             },
             false => self.ssh_user.clone()
         };
-        let remote_port = match vars.contains_key(&String::from("jet_ssh_port")) {
-            true => match vars.get(&String::from("jet_ssh_port")).unwrap().as_str() {
+        let remote_port = match vars.contains_key(String::from("jet_ssh_port")) {
+            true => match vars.get(String::from("jet_ssh_port")).unwrap().as_str() {
                 Some(x) => {
                     match x.parse::<i64>() {
                         Ok(ix) => ix,
                         Err(_) => self.ssh_port
                     }
                 },
-                None => match vars.get(&String::from("jet_ssh_port")).unwrap().as_i64() {
+                None => match vars.get(String::from("jet_ssh_port")).unwrap().as_i64() {
                     Some(x) => x,
                     None => self.ssh_port
                 }
@@ -337,8 +337,8 @@ impl PlaybookContext {
                 self.ssh_port
             }
         };
-        let keyfile : Option<String> = match vars.contains_key(&String::from("jet_ssh_private_key_file")) {
-            true => match vars.get(&String::from("jet_ssh_private_key_file")).unwrap().as_str() {
+        let keyfile : Option<String> = match vars.contains_key(String::from("jet_ssh_private_key_file")) {
+            true => match vars.get(String::from("jet_ssh_private_key_file")).unwrap().as_str() {
                 Some(x) => {
                     match expanduser(String::from(x)) {
                         Ok(expanded) => Some(expanded.display().to_string()),
@@ -349,29 +349,17 @@ impl PlaybookContext {
             },
             false => None
         };
-        let passphrase : Option<String> = match vars.contains_key(&String::from("jet_ssh_private_key_passphrase")) {
-            true => match vars.get(&String::from("jet_ssh_private_key_passphrase")).unwrap().as_str() {
-                Some(x) => Some(String::from(x)),
-                None =>  None
-            },
-            false => match env::var("JET_SSH_PRIVATE_KEY_PASSPHRASE") {
-                Ok(x) => Some(x),
-                Err(_) => None
-            }
+        let passphrase : Option<String> = match vars.contains_key(String::from("jet_ssh_private_key_passphrase")) {
+            true => vars.get(String::from("jet_ssh_private_key_passphrase")).unwrap().as_str().map(String::from),
+            false => env::var("JET_SSH_PRIVATE_KEY_PASSPHRASE").ok()
         };
-        let key_comment: Option<String> = match vars.contains_key(&String::from("jet_ssh_key_comment")) {
-            true => match vars.get(&String::from("jet_ssh_key_comment")).unwrap().as_str() {
-                Some(x) => Some(String::from(x)),
-                None =>  None
-            },
-            false => match env::var("JET_SSH_KEY_COMMENT") {
-                Ok(x) => Some(x),
-                Err(_) => None
-             }
+        let key_comment: Option<String> = match vars.contains_key(String::from("jet_ssh_key_comment")) {
+            true => vars.get(String::from("jet_ssh_key_comment")).unwrap().as_str().map(String::from),
+            false => env::var("JET_SSH_KEY_COMMENT").ok()
         };
 
 
-        return (remote_hostname, remote_user, remote_port, keyfile, passphrase, key_comment)
+        (remote_hostname, remote_user, remote_port, keyfile, passphrase, key_comment)
     } 
 
     // loads environment variables into the context, adding an "ENV_foo" prefix
@@ -382,8 +370,7 @@ impl PlaybookContext {
         let mut my_env = self.env_storage.write().unwrap();
         // some common environment variables that may occur are not useful for playbooks
         // or they have no need to share that with other hosts
-        let do_not_load = vec![
-            "OLDPWD",
+        let do_not_load = ["OLDPWD",
             "PWD",
             "SHLVL",
             "SSH_AUTH_SOCK",
@@ -391,8 +378,7 @@ impl PlaybookContext {
             "TERM_SESSION_ID",
             "XPC_FLAGS",
             "XPC_SERVICE_NAME",
-            "_"
-        ];
+            "_"];
         
         for (k,v) in env::vars() {
             if ! do_not_load.contains(&k.as_str()) {
@@ -404,146 +390,146 @@ impl PlaybookContext {
     // various functions in Jet make use of GUIDs, for example for temp file locations
 
     pub fn get_guid(&self) -> String {
-        return GUID::rand().to_string();
+        GUID::rand().to_string()
     }
 
     // ==================================================================================
     // STATISTICS
 
     pub fn get_role_count(&self) -> usize {
-        return self.role_count;
+        self.role_count
     }
 
     pub fn increment_role_count(&mut self) {
-        self.role_count = self.role_count + 1;
+        self.role_count += 1;
     }
 
     pub fn get_task_count(&self) -> usize {
-        return self.task_count;
+        self.task_count
     }
 
     pub fn increment_task_count(&mut self) {
-        self.task_count = self.task_count + 1;
+        self.task_count += 1;
     }
 
-    pub fn increment_attempted_for_host(&mut self, host: &String) {
-        *self.attempted_count_for_host.entry(host.clone()).or_insert(0) += 1;
+    pub fn increment_attempted_for_host(&mut self, host: &str) {
+        *self.attempted_count_for_host.entry(host.to_owned()).or_insert(0) += 1;
     }
 
-    pub fn increment_created_for_host(&mut self, host: &String) {
-        *self.created_count_for_host.entry(host.clone()).or_insert(0) += 1;
-        *self.adjusted_count_for_host.entry(host.clone()).or_insert(0) += 1;
+    pub fn increment_created_for_host(&mut self, host: &str) {
+        *self.created_count_for_host.entry(host.to_owned()).or_insert(0) += 1;
+        *self.adjusted_count_for_host.entry(host.to_owned()).or_insert(0) += 1;
     }
 
-    pub fn increment_removed_for_host(&mut self, host: &String) {
-        *self.removed_count_for_host.entry(host.clone()).or_insert(0) += 1;
-        *self.adjusted_count_for_host.entry(host.clone()).or_insert(0) += 1;
+    pub fn increment_removed_for_host(&mut self, host: &str) {
+        *self.removed_count_for_host.entry(host.to_owned()).or_insert(0) += 1;
+        *self.adjusted_count_for_host.entry(host.to_owned()).or_insert(0) += 1;
     }
 
-    pub fn increment_modified_for_host(&mut self, host: &String) {
-        *self.modified_count_for_host.entry(host.clone()).or_insert(0) += 1;
-        *self.adjusted_count_for_host.entry(host.clone()).or_insert(0) += 1;
+    pub fn increment_modified_for_host(&mut self, host: &str) {
+        *self.modified_count_for_host.entry(host.to_owned()).or_insert(0) += 1;
+        *self.adjusted_count_for_host.entry(host.to_owned()).or_insert(0) += 1;
     }
 
-    pub fn increment_executed_for_host(&mut self, host: &String) {
-        *self.executed_count_for_host.entry(host.clone()).or_insert(0) += 1;
-        *self.adjusted_count_for_host.entry(host.clone()).or_insert(0) += 1;
+    pub fn increment_executed_for_host(&mut self, host: &str) {
+        *self.executed_count_for_host.entry(host.to_owned()).or_insert(0) += 1;
+        *self.adjusted_count_for_host.entry(host.to_owned()).or_insert(0) += 1;
     }
 
-    pub fn increment_failed_for_host(&mut self, host: &String) {
-        *self.failed_count_for_host.entry(host.clone()).or_insert(0) += 1;
+    pub fn increment_failed_for_host(&mut self, host: &str) {
+        *self.failed_count_for_host.entry(host.to_owned()).or_insert(0) += 1;
     }
 
-    pub fn increment_passive_for_host(&mut self, host: &String) {
-        *self.passive_count_for_host.entry(host.clone()).or_insert(0) += 1;
+    pub fn increment_passive_for_host(&mut self, host: &str) {
+        *self.passive_count_for_host.entry(host.to_owned()).or_insert(0) += 1;
     }
 
-    pub fn increment_matched_for_host(&mut self, host: &String) {
-        *self.matched_count_for_host.entry(host.clone()).or_insert(0) += 1;
+    pub fn increment_matched_for_host(&mut self, host: &str) {
+        *self.matched_count_for_host.entry(host.to_owned()).or_insert(0) += 1;
     }
 
-    pub fn increment_skipped_for_host(&mut self, host: &String) {
-        *self.skipped_count_for_host.entry(host.clone()).or_insert(0) += 1;
+    pub fn increment_skipped_for_host(&mut self, host: &str) {
+        *self.skipped_count_for_host.entry(host.to_owned()).or_insert(0) += 1;
     }
 
     pub fn get_total_attempted_count(&self) -> usize {
-        return self.attempted_count_for_host.values().fold(0, |ttl, &x| ttl + x);
+        self.attempted_count_for_host.values().sum::<usize>()
     }
 
     pub fn get_total_creation_count(&self) -> usize {
-        return self.created_count_for_host.values().fold(0, |ttl, &x| ttl + x);
+        self.created_count_for_host.values().sum::<usize>()
     }
 
     pub fn get_total_modified_count(&self) -> usize{
-        return self.modified_count_for_host.values().fold(0, |ttl, &x| ttl + x);
+        self.modified_count_for_host.values().sum::<usize>()
     }
 
     pub fn get_total_removal_count(&self) -> usize{
-        return self.removed_count_for_host.values().fold(0, |ttl, &x| ttl + x);
+        self.removed_count_for_host.values().sum::<usize>()
     }
 
     pub fn get_total_executions_count(&self) -> usize {
-        return self.executed_count_for_host.values().fold(0, |ttl, &x| ttl + x);
+        self.executed_count_for_host.values().sum::<usize>()
     }
 
     pub fn get_total_failed_count(&self) -> usize{
-        return self.failed_count_for_host.values().fold(0, |ttl, &x| ttl + x);
+        self.failed_count_for_host.values().sum::<usize>()
     }
 
     pub fn get_total_adjusted_count(&self) -> usize {
-        return self.adjusted_count_for_host.values().fold(0, |ttl, &x| ttl + x);
+        self.adjusted_count_for_host.values().sum::<usize>()
     }
 
     pub fn get_total_passive_count(&self) -> usize {
-        return self.passive_count_for_host.values().fold(0, |ttl, &x| ttl + x);
+        self.passive_count_for_host.values().sum::<usize>()
     }
 
     pub fn get_total_matched_count(&self) -> usize {
-        return self.matched_count_for_host.values().fold(0, |ttl, &x| ttl + x);
+        self.matched_count_for_host.values().sum::<usize>()
     }
 
     pub fn get_total_skipped_count(&self) -> usize {
-        return self.skipped_count_for_host.values().fold(0, |ttl, &x| ttl + x);
+        self.skipped_count_for_host.values().sum::<usize>()
     }
 
     pub fn get_hosts_creation_count(&self) -> usize {
-        return self.created_count_for_host.keys().len();
+        self.created_count_for_host.keys().len()
     }
 
     pub fn get_hosts_modified_count(&self) -> usize {
-        return self.modified_count_for_host.keys().len();
+        self.modified_count_for_host.keys().len()
     }
 
     pub fn get_hosts_removal_count(&self) -> usize {
-        return self.removed_count_for_host.keys().len();
+        self.removed_count_for_host.keys().len()
     }
 
     pub fn get_hosts_executions_count(&self) -> usize {
-        return self.executed_count_for_host.keys().len();
+        self.executed_count_for_host.keys().len()
     }
 
     pub fn get_hosts_passive_count(&self) -> usize {
-        return self.passive_count_for_host.keys().len();
+        self.passive_count_for_host.keys().len()
     }
 
     pub fn get_hosts_matched_count(&self) -> usize {
-        return self.matched_count_for_host.keys().len();
+        self.matched_count_for_host.keys().len()
     }
 
     pub fn get_hosts_skipped_count(&self) -> usize {
-        return self.skipped_count_for_host.keys().len();
+        self.skipped_count_for_host.keys().len()
     }
 
     pub fn get_hosts_failed_count(&self) -> usize {
-        return self.failed_count_for_host.keys().len();
+        self.failed_count_for_host.keys().len()
     }
 
     pub fn get_hosts_adjusted_count(&self) -> usize {
-        return self.adjusted_count_for_host.keys().len();
+        self.adjusted_count_for_host.keys().len()
     }
 
     pub fn get_hosts_seen_count(&self) -> usize {
-        return self.seen_hosts.keys().len();
+        self.seen_hosts.keys().len()
     }
     
 

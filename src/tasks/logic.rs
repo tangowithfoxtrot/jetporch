@@ -49,6 +49,7 @@ pub struct PreLogicEvaluated {
     pub subscribe: Option<String>,
     pub sudo: Option<String>,
     pub items: Option<ItemsInput>,
+    #[allow(dead_code)] // FIXME: remove if not needed
     pub tags: Option<Vec<String>>
 }
 
@@ -77,13 +78,13 @@ impl PreLogicInput {
             return Ok(None);
         }
         let input2 = input.as_ref().unwrap();
-        return Ok(Some(PreLogicEvaluated {
+        Ok(Some(PreLogicEvaluated {
             condition: input2.condition.clone(),
             sudo: handle.template.string_option_no_spaces(request, tm, &String::from("sudo"), &input2.sudo)?,
             subscribe: handle.template.no_template_string_option_trim(&input2.subscribe),
             items: input2.items.clone(),
             tags: input2.tags.clone()
-        }));
+        }))
     }
 
 }
@@ -95,13 +96,13 @@ impl PostLogicInput {
             return Ok(None);
         }
         let input2 = input.as_ref().unwrap();
-        return Ok(Some(PostLogicEvaluated {
+        Ok(Some(PostLogicEvaluated {
             notify: handle.template.string_option_trim(request, tm, &String::from("notify"), &input2.notify)?,
             // unsafe here means the options cannot be sent to the shell, which they are not.
             delay:         handle.template.integer_option_to_integer(request, tm, &String::from("delay"), &input2.delay, 1)?,
             ignore_errors: handle.template.boolean_option_default_false(request, tm, &String::from("ignore_errors"), &input2.ignore_errors)?,
             retry:         handle.template.integer_option_to_integer(request, tm, &String::from("retry"), &input2.retry, 0)?,
-        }));
+        }))
     }
 }
 
@@ -109,7 +110,7 @@ impl PostLogicInput {
 pub fn template_items(handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: TemplateMode, items_input: &Option<ItemsInput>) 
     -> Result<Vec<serde_yaml::Value>, Arc<TaskResponse>> {
 
-    return match items_input {
+    match items_input {
 
         None => Ok(empty_items_vector()),
         
@@ -119,18 +120,18 @@ pub fn template_items(handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: 
                 &handle.host, 
                 BlendTarget::NotTemplateModule
             );
-            match blended.contains_key(&x) {
+            match blended.contains_key(x) {
                 true => {
-                    let value : serde_yaml::Value = blended.get(&x).unwrap().clone();
+                    let value : serde_yaml::Value = blended.get(x).unwrap().clone();
                     match value {
                         serde_yaml::Value::Sequence(vs) => template_serde_sequence(handle, request, tm, vs),
                         _ => {
-                            return Err(handle.response.is_failed(request, &format!("with/items variable did not resolve to a list")));
+                            Err(handle.response.is_failed(request, "with/items variable did not resolve to a list"))
                         }
                     }
                 }, 
                 false => {
-                    return Err(handle.response.is_failed(request, &format!("variable not found for items: {}", x)))
+                    Err(handle.response.is_failed(request, &format!("variable not found for items: {}", x)))
                 }
             }
         },
@@ -145,7 +146,7 @@ pub fn template_items(handle: &Arc<TaskHandle>, request: &Arc<TaskRequest>, tm: 
 }
 
 pub fn empty_items_vector() -> Vec<serde_yaml::Value> {
-    return vec![serde_yaml::Value::Bool(true)];
+    vec![serde_yaml::Value::Bool(true)]
 }
 
 pub fn template_serde_sequence(
@@ -166,5 +167,5 @@ pub fn template_serde_sequence(
             x => { output.push(x.clone()) }
         }
     }
-    return Ok(output);
+    Ok(output)
 }

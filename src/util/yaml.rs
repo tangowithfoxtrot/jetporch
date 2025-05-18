@@ -27,10 +27,10 @@ const YAML_ERROR_WIDTH:usize = 180; // things will wrap in terminal anyway
 
 pub fn show_yaml_error_in_context(yaml_error: &serde_yaml::Error, path: &Path) {
 
-    println!("");
+    println!();
 
     let location = yaml_error.location();
-    let mut yaml_error_str = String::from(format!("{}", yaml_error));
+    let mut yaml_error_str = format!("{}", yaml_error);
 
     yaml_error_str.truncate(YAML_ERROR_WIDTH);
     if yaml_error_str.len() > YAML_ERROR_WIDTH - 3 {
@@ -56,25 +56,25 @@ pub fn show_yaml_error_in_context(yaml_error: &serde_yaml::Error, path: &Path) {
 
     banner(&format!("Error reading YAML file: {}, {}", path.display(), yaml_error_str).to_string());
 
-    let show_start: usize;
+    
     let mut show_stop : usize = error_line + YAML_ERROR_SHOW_LINES;
     
-    if error_line < YAML_ERROR_SHOW_LINES {
-        show_start = 0; 
+    let show_start: usize = if error_line < YAML_ERROR_SHOW_LINES {
+        0 
     } else {
-        show_start = error_line - YAML_ERROR_SHOW_LINES;
-    }
+        error_line - YAML_ERROR_SHOW_LINES
+    };
 
     if show_stop > line_count {
         show_stop = line_count;
     }
 
-    println!("");
+    println!();
 
     let mut count: usize = 0;
 
     for line in lines.iter() {
-        count = count + 1;
+        count += 1;
         if count >= show_start && count <= show_stop {
             if count ==  error_line {
                 println!("     {count:5}:{error_column:5} | >>> | {}", line);
@@ -84,7 +84,7 @@ pub fn show_yaml_error_in_context(yaml_error: &serde_yaml::Error, path: &Path) {
         }
     }
 
-    println!("");
+    println!();
 
 }
 

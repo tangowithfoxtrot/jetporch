@@ -15,7 +15,7 @@
 // long with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::fs;
-use std::path::{Path};
+use std::path::Path;
 use std::fs::ReadDir;
 use std::os::unix::fs::PermissionsExt;
 use std::process;
@@ -23,7 +23,7 @@ use std::io::Read;
 
 // read a directory as per the normal rust way, but map any errors to strings
 pub fn jet_read_dir(path: &Path) -> Result<ReadDir, String> {
-    return fs::read_dir(path).map_err(
+    fs::read_dir(path).map_err(
         |_x| format!("failed to read directory: {}", path.display())
     )
 }
@@ -41,9 +41,9 @@ pub fn path_walk<F>(path: &Path, mut with_each_path: F) -> Result<(), String>
 
 // open a file per the normal rust way, but map any errors to strings
 pub fn jet_file_open(path: &Path) -> Result<std::fs::File, String> {
-    return std::fs::File::open(path).map_err(
+    std::fs::File::open(path).map_err(
         |_x| format!("unable to open file: {}", path.display())
-    );
+    )
 }
 
 pub fn read_local_file(path: &Path) -> Result<String,String> {
@@ -56,21 +56,21 @@ pub fn read_local_file(path: &Path) -> Result<String,String> {
             return Err(format!("unable to read file: {}, {:?}", path.display(), x));
         }
     };
-    return Ok(buffer.clone());
+    Ok(buffer.clone())
 }
 
 // get the last part of the file ignoring the directory part
 pub fn path_basename_as_string(path: &Path) -> String {
-    return path.file_name().unwrap().to_str().unwrap().to_string();
+    path.file_name().unwrap().to_str().unwrap().to_string()
 }
 
 // get the last part of the file ignoring the directory part
 pub fn path_as_string(path: &Path) -> String {
-    return path.to_str().unwrap().to_string();
+    path.to_str().unwrap().to_string()
 }
 
 pub fn directory_as_string(path: &Path) -> String {
-    return path.parent().unwrap().to_str().unwrap().to_string();
+    path.parent().unwrap().to_str().unwrap().to_string()
 }
 
 pub fn quit(s: &String) {
@@ -91,5 +91,5 @@ pub fn is_executable(path: &Path) -> bool {
     if mode_bits == 0 {
         return false;
     }
-    return true;
+    true
 }
